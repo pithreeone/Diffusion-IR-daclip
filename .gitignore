@@ -1,0 +1,5 @@
+experiments/
+__pycache__/
+test-data/
+open_clip/
+pretrained/
