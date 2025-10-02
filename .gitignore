@@ -3,3 +3,4 @@ __pycache__/
 test-data/
 open_clip/
 pretrained/
+image/

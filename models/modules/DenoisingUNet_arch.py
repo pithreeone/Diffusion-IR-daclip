@@ -19,14 +19,17 @@ from .attention import SpatialTransformer
 
 
 class ConditionalUNet(nn.Module):
+    # def __init__(self, in_nc, out_nc, nf, ch_mult=[1, 2, 4, 4], 
+    #                 context_dim=512, use_degra_context=True, use_image_context=False, upscale=1):
     def __init__(self, in_nc, out_nc, nf, ch_mult=[1, 2, 4, 4], 
-                    context_dim=512, use_degra_context=True, use_image_context=False, upscale=1):
+                    context_dim=512, use_daclip_context=True, upscale=1):
         super().__init__()
         self.depth = len(ch_mult)
         self.upscale = upscale # not used
         self.context_dim = -1 if context_dim is None else context_dim
-        self.use_image_context = use_image_context
-        self.use_degra_context = use_degra_context
+        # self.use_image_context = use_image_context
+        # self.use_degra_context = use_degra_context
+        self.use_image_context = self.use_degra_context = self.use_daclip_context = use_daclip_context
 
         num_head_channels = 32
         dim_head = num_head_channels
@@ -55,7 +58,7 @@ class ConditionalUNet(nn.Module):
             nn.Linear(time_dim, time_dim)
         )
 
-        if self.context_dim > 0 and use_degra_context: 
+        if self.context_dim > 0 and self.use_degra_context: 
             self.prompt = nn.Parameter(torch.rand(1, time_dim))
             self.text_mlp = nn.Sequential(
                 nn.Linear(context_dim, time_dim), NonLinearity(),
@@ -75,7 +78,7 @@ class ConditionalUNet(nn.Module):
             num_heads_out = dim_out // num_head_channels
             dim_head_in = dim_in // num_heads_in
 
-            if use_image_context and context_dim > 0:
+            if self.use_image_context and context_dim > 0:
                 att_down = LinearAttention(dim_in) if i < 3 else SpatialTransformer(dim_in, num_heads_in, dim_head, depth=1, context_dim=context_dim)
                 att_up = LinearAttention(dim_out) if i < 3 else SpatialTransformer(dim_out, num_heads_out, dim_head, depth=1, context_dim=context_dim)
             else:
@@ -99,7 +102,7 @@ class ConditionalUNet(nn.Module):
         mid_dim = nf * ch_mult[-1]
         num_heads_mid = mid_dim // num_head_channels
         self.mid_block1 = block_class(dim_in=mid_dim, dim_out=mid_dim, time_emb_dim=time_dim)
-        if use_image_context and context_dim > 0:
+        if self.use_image_context and context_dim > 0:
             self.mid_attn = Residual(PreNorm(mid_dim, SpatialTransformer(mid_dim, num_heads_mid, dim_head, depth=1, context_dim=context_dim)))
         else:
             self.mid_attn = Residual(PreNorm(mid_dim, LinearAttention(mid_dim)))

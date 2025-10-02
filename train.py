@@ -184,7 +184,7 @@ def main():
             testset_config = "options/eval5d.yaml"
             # val_set = get_testsets(testset_config, process_mode='val')
             val_set = create_dataset(dataset_opt)
-            val_set = Subset(val_set, range(10))
+            val_set = Subset(val_set, range(opt['datasets']['val']['n_sample']))
             val_loader = create_dataloader(val_set, dataset_opt, opt, None)
             if rank <= 0:
                 logger.info(
@@ -240,6 +240,7 @@ def main():
     
     os.makedirs('image', exist_ok=True)
 
+    use_daclip_context = opt['network_G']['setting']['use_daclip_context']
     for epoch in range(start_epoch, total_epochs + 1):
         if opt["dist"]:
             train_sampler.set_epoch(epoch)
@@ -250,17 +251,19 @@ def main():
                 break
 
             LQ, GT, deg_type = train_data["LQ"], train_data["GT"], train_data["type"]
-            deg_token = tokenizer(deg_type).to(device)
-            img4clip = train_data["LQ_clip"].to(device)
-            with torch.no_grad(), torch.cuda.amp.autocast():
-                image_context, degra_context = clip_model.encode_image(img4clip, control=True)
-                image_context = image_context.float()
-                degra_context = degra_context.float()
-
             timesteps, states = sde.generate_random_states(x0=GT, mu=LQ)
 
-            model.feed_data(states, LQ, GT, text_context=degra_context, image_context=image_context) # xt, mu, x0
-            # model.feed_data(states, LQ, GT) # xt, mu, x0
+            if use_daclip_context:
+                deg_token = tokenizer(deg_type).to(device)
+                img4clip = train_data["LQ_clip"].to(device)
+                with torch.no_grad(), torch.cuda.amp.autocast():
+                    image_context, degra_context = clip_model.encode_image(img4clip, control=True)
+                    image_context = image_context.float()
+                    degra_context = degra_context.float()
+                model.feed_data(states, LQ, GT, text_context=degra_context, image_context=image_context) # xt, mu, x0
+            else:
+                model.feed_data(states, LQ, GT) # xt, mu, x0
+
             model.optimize_parameters(current_step, timesteps, sde)
             model.update_learning_rate(
                 current_step, warmup_iter=opt["train"]["warmup_iter"]
@@ -288,17 +291,20 @@ def main():
                 for _, val_data in enumerate(val_loader):
 
                     LQ, GT, deg_type = val_data["LQ"], val_data["GT"], val_data["type"]
-                    deg_token = tokenizer(deg_type).to(device)
-                    img4clip = val_data["LQ_clip"].to(device)
-                    with torch.no_grad(), torch.cuda.amp.autocast():
-                        image_context, degra_context = clip_model.encode_image(img4clip, control=True)
-                        image_context = image_context.float()
-                        degra_context = degra_context.float()
-
                     noisy_state = sde.noise_state(LQ)
 
                     # valid Predictor
-                    model.feed_data(noisy_state, LQ, GT, text_context=degra_context, image_context=image_context)
+                    if use_daclip_context:
+                        deg_token = tokenizer(deg_type).to(device)
+                        img4clip = val_data["LQ_clip"].to(device)
+                        with torch.no_grad(), torch.cuda.amp.autocast():
+                            image_context, degra_context = clip_model.encode_image(img4clip, control=True)
+                            image_context = image_context.float()
+                            degra_context = degra_context.float()
+                        model.feed_data(noisy_state, LQ, GT, text_context=degra_context, image_context=image_context)
+                    else:
+                        model.feed_data(noisy_state, LQ, GT)
+
                     model.test(sde)
                     visuals = model.get_current_visuals()
 
