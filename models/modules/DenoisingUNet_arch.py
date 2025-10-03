@@ -22,7 +22,7 @@ class ConditionalUNet(nn.Module):
     # def __init__(self, in_nc, out_nc, nf, ch_mult=[1, 2, 4, 4], 
     #                 context_dim=512, use_degra_context=True, use_image_context=False, upscale=1):
     def __init__(self, in_nc, out_nc, nf, ch_mult=[1, 2, 4, 4], 
-                    context_dim=512, use_daclip_context=True, upscale=1):
+                    context_dim=512, use_daclip_context=True, upscale=1, in_ch_scale=2):
         super().__init__()
         self.depth = len(ch_mult)
         self.upscale = upscale # not used
@@ -37,7 +37,7 @@ class ConditionalUNet(nn.Module):
         block_class = functools.partial(ResBlock, conv=default_conv, act=NonLinearity())
 
         # self.init_conv = default_conv(in_nc*2, nf, 7)
-        self.init_conv = default_conv(in_nc*3, nf, 7)
+        self.init_conv = default_conv(in_nc*in_ch_scale, nf, 7)
         
         # time embeddings
         time_dim = nf * 4
@@ -120,7 +120,7 @@ class ConditionalUNet(nn.Module):
         return x
 
     # def forward(self, xt, cond, time, text_context=None, image_context=None):
-    def forward(self, xt, mu, cond, time, text_context=None, image_context=None):
+    def forward(self, xt, mu, time, cond=None, text_context=None, image_context=None):
 
         if isinstance(time, int) or isinstance(time, float):
             time = torch.tensor([time]).to(xt.device)
@@ -128,7 +128,10 @@ class ConditionalUNet(nn.Module):
         # x = xt - cond
         # x = torch.cat([x, cond], dim=1)
         x = xt - mu
-        x = torch.cat([x, mu, cond], dim=1)
+        if cond is not None:
+            x = torch.cat([x, mu, cond], dim=1)
+        else:
+            x = torch.cat([x, mu], dim=1)
 
         H, W = x.shape[2:]
         x = self.check_image_size(x, H, W)

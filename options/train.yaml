@@ -6,7 +6,7 @@ model: denoising
 # distortion: [motion-blurry,hazy,low-light,noisy,rainy]
 distortion: [rainy]
 # distortion: [low-light]
-gpu_ids: [2, 3]
+gpu_ids: [4, 5]
 
 sde:
   max_sigma: 50
@@ -82,9 +82,9 @@ train:
   weight: 1.0
 
   manual_seed: 0
-  val_freq: !!float 4e4
+  val_freq: !!float 2e4
 
 #### logger
 logger:
   print_freq: 200
-  save_checkpoint_freq: !!float 4e4
+  save_checkpoint_freq: !!float 2e4

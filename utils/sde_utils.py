@@ -203,7 +203,7 @@ class IRSDE(SDE):
 
     def noise_fn_cond(self, x, mu, cond, t, scale=1.0, **kwargs):
         # need to pre-set mu and score_model
-        return self.model(x, mu, cond, t * scale, **kwargs)
+        return self.model(x, mu, t * scale, cond=cond, **kwargs)
 
     # optimum x_{t-1}
     def reverse_optimum_step(self, xt, x0, t):

@@ -77,7 +77,7 @@ if use_daclip_context:
 
 
 sde = util.IRSDE(max_sigma=opt["sde"]["max_sigma"], T=opt["sde"]["T"], schedule=opt["sde"]["schedule"], eps=opt["sde"]["eps"], device=device)
-sde.set_model(model.model)
+# sde.set_model(model.fs_model)
 lpips_fn = lpips.LPIPS(net='alex').to(device)
 
 scale = opt['degradation']['scale']

@@ -33,19 +33,24 @@ class DenoisingModelSS(BaseModel):
         train_opt = opt["train"]
 
         # define network and load pretrained models
-        self.model = networks.define_G(opt).to(self.device)
+        self.fs_model = networks.define_G(opt, in_ch_scale=2).to(self.device)
+        self.fs_model.eval()
+        for param in self.fs_model.parameters():
+            param.requires_grad = False
+        self.ss_model = networks.define_G(opt, in_ch_scale=3).to(self.device)
         if opt["dist"]:
-            self.model = DistributedDataParallel(
-                self.model, device_ids=[torch.cuda.current_device()]
+            self.ss_model = DistributedDataParallel(
+                self.ss_model, device_ids=[torch.cuda.current_device()]
             )
         else:
-            self.model = DataParallel(self.model)
+            self.ss_model = DataParallel(self.ss_model)
         # print network
         # self.print_network()
-        self.load()
+        self.load_fs()
+        self.load_ss()
 
         if self.is_train:
-            self.model.train()
+            self.ss_model.train()
 
             is_weighted = opt['train']['is_weighted']
             loss_type = opt['train']['loss_type']
@@ -58,7 +63,7 @@ class DenoisingModelSS(BaseModel):
             for (
                 k,
                 v,
-            ) in self.model.named_parameters():  # can optimize for a part of the model
+            ) in self.ss_model.named_parameters():  # can optimize for a part of the model
                 if v.requires_grad:
                     optim_params.append(v)
                 else:
@@ -115,13 +120,14 @@ class DenoisingModelSS(BaseModel):
             else:
                 raise NotImplementedError("MultiStepLR learning rate scheme is enough.")
 
-            self.ema = EMA(self.model, beta=0.995, update_every=10).to(self.device)
+            self.ema = EMA(self.ss_model, beta=0.995, update_every=10).to(self.device)
             self.log_dict = OrderedDict()
 
     def feed_data(self, state, LQ, GT=None, FS=None, text_context=None, image_context=None):
         self.state = state.to(self.device)    # noisy_state
         self.condition = LQ.to(self.device)  # LQ
-        self.first_stage_result = FS.to(self.device) # FS
+        if FS is not None:
+            self.first_stage_result = FS.to(self.device) # FS
         if GT is not None:
             self.state_0 = GT.to(self.device)  # GT
         self.text_context = text_context
@@ -154,17 +160,27 @@ class DenoisingModelSS(BaseModel):
 
     def test(self, sde=None, mode='posterior', save_states=False):
         # sde.set_mu(self.condition)
-        sde.set_mu(self.first_stage_result)
-
-        self.model.eval()
+        self.ss_model.eval()
         with torch.no_grad():
             if mode == 'sde':
                 self.output = sde.reverse_sde(self.state, save_states=save_states, text_context=self.text_context, image_context=self.image_context)
-            else:
+            elif mode == 'posterior':
+                sde.set_mu(self.first_stage_result)
                 # self.output = sde.reverse_posterior(self.state, save_states=save_states, text_context=self.text_context, image_context=self.image_context)
                 self.output = sde.reverse_posterior_cond(self.state, cond=self.condition, save_states=save_states, text_context=self.text_context, image_context=self.image_context)
+            elif mode == 'posterior_test':
+                # First stage prediction
+                sde.set_model(self.fs_model)
+                sde.set_mu(self.condition)
+                self.fs_output = sde.reverse_posterior(self.state, save_states=save_states, text_context=self.text_context, image_context=self.image_context)
+                
+                # Second stage prediction
+                sde.set_model(self.ss_model)
+                sde.set_mu(self.fs_output)
+                ss_noisy_state = sde.noise_state(self.fs_output)
+                self.output = sde.reverse_posterior_cond(ss_noisy_state, cond=self.condition, save_states=save_states, text_context=self.text_context, image_context=self.image_context)
 
-        self.model.train()
+        self.ss_model.train()
 
     def get_current_log(self):
         return self.log_dict
@@ -195,12 +211,18 @@ class DenoisingModelSS(BaseModel):
             )
             logger.info(s)
 
-    def load(self):
-        load_path_G = self.opt["path"]["pretrain_model_G"]
+    def load_ss(self):
+        load_path_G = self.opt["path"]["ss_pretrain_model_G"]
         if load_path_G is not None:
             logger.info("Loading model for G [{:s}] ...".format(load_path_G))
-            self.load_network(load_path_G, self.model, self.opt["path"]["strict_load"])
+            self.load_network(load_path_G, self.ss_model, self.opt["path"]["strict_load"])
+
+    def load_fs(self):
+        load_path_G = self.opt["path"]["fs_pretrain_model_G"]
+        if load_path_G is not None:
+            logger.info("Loading model for G [{:s}] ...".format(load_path_G))
+            self.load_network(load_path_G, self.fs_model, self.opt["path"]["strict_load"])
 
     def save(self, iter_label):
-        self.save_network(self.model, "G", iter_label)
+        self.save_network(self.ss_model, "G", iter_label)
         self.save_network(self.ema.ema_model, "EMA", 'lastest')

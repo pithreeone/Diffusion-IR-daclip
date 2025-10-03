@@ -241,7 +241,7 @@ def main():
     os.makedirs('image', exist_ok=True)
 
     use_daclip_context = opt['network_G']['setting']['use_daclip_context']
-    for epoch in range(start_epoch, total_epochs + 1):
+    for epoch in range(start_epoch, total_epochs + 2):
         if opt["dist"]:
             train_sampler.set_epoch(epoch)
         for _, train_data in enumerate(train_loader):
@@ -308,9 +308,9 @@ def main():
                     model.test(sde)
                     visuals = model.get_current_visuals()
 
-                    output = util.tensor2img(visuals["Output"].squeeze())  # uint8
-                    gt_img = util.tensor2img(GT.squeeze())  # uint8
-                    lq_img = util.tensor2img(LQ.squeeze())
+                    output = util.tensor2img((visuals["Output"].squeeze()+1.0)/2.0)  # uint8
+                    gt_img = util.tensor2img((GT.squeeze()+1.0)/2.0)  # uint8
+                    lq_img = util.tensor2img((LQ.squeeze()+1.0)/2.0)
 
                     util.save_img(output, f'image/{idx}_{deg_type[0]}_SR.png')
                     util.save_img(gt_img, f'image/{idx}_{deg_type[0]}_GT.png')
@@ -357,7 +357,7 @@ def main():
         logger.info("Saving the final model.")
         model.save("latest")
         logger.info("End of Predictor and Corrector training.")
-    tb_logger.close()
+        tb_logger.close()
 
 
 if __name__ == "__main__":

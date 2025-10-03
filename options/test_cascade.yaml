@@ -1,16 +1,16 @@
 name: universal-ir
 suffix: ~  # add suffix to saved images
-model: denoising
+model: denoising_ss
 # distortion: [motion-blurry,hazy,jpeg-compressed,low-light,noisy,raindrop,rainy,shadowed,snowy,uncompleted] # uncompleted means inpainting
 distortion: [rainy] # uncompleted means inpainting
-gpu_ids: [2]
+gpu_ids: [3]
 
 sde:
   max_sigma: 50
   T: 100
   schedule: cosine # linear, cosine
   eps: 0.005
-  sampling_mode: posterior # sde or posterior
+  sampling_mode: posterior_test # sde or posterior
   
 degradation:
   # for denoising
@@ -29,10 +29,10 @@ datasets:
   test2:
     name: rainy
     mode: LQGT
-    # dataroot_GT: test-data/Rain100L/target
-    # dataroot_LQ: test-data/Rain100L/input
-    dataroot_GT: ../Warehouse/Diffusion-IR/datasets/train/rainy/RainTrainL/GT
-    dataroot_LQ: ../Warehouse/Diffusion-IR/datasets/train/rainy/RainTrainL/LQ
+    dataroot_GT: test-data/Rain100L/target
+    dataroot_LQ: test-data/Rain100L/input
+    # dataroot_GT: ../Warehouse/Diffusion-IR/datasets/train/rainy/RainTrainL/GT
+    # dataroot_LQ: ../Warehouse/Diffusion-IR/datasets/train/rainy/RainTrainL/LQ
   # test3:
   #  name: hazy
   #  mode: LQGT
@@ -65,5 +65,5 @@ network_G:
 path:
   root: ./
   fs_pretrain_model_G: experiments/universal-ir_251002-105026/models/200000_G.pth
-  ss_pretrain_model_G: experiments/universal-ir_251003-000914/models/lastest_EMA.pth
+  ss_pretrain_model_G: experiments/universal-ir_251003-000914/models/540000_G.pth
   

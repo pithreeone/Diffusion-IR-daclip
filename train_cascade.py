@@ -216,7 +216,7 @@ def main():
         start_epoch = 0
 
     sde = util.IRSDE(max_sigma=opt["sde"]["max_sigma"], T=opt["sde"]["T"], schedule=opt["sde"]["schedule"], eps=opt["sde"]["eps"], device=device)
-    sde.set_model(model.model)
+    sde.set_model(model.ss_model)
 
     scale = opt['degradation']['scale']
 
@@ -232,7 +232,7 @@ def main():
     os.makedirs('image', exist_ok=True)
 
     use_daclip_context = opt['network_G']['setting']['use_daclip_context']
-    for epoch in range(start_epoch, total_epochs + 1):
+    for epoch in range(start_epoch, total_epochs + 2):
         if opt["dist"]:
             train_sampler.set_epoch(epoch)
         for _, train_data in enumerate(train_loader):
@@ -366,7 +366,7 @@ def main():
         logger.info("Saving the final model.")
         model.save("latest")
         logger.info("End of Predictor and Corrector training.")
-    tb_logger.close()
+        tb_logger.close()
 
 
 if __name__ == "__main__":
