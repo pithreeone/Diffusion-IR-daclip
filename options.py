@@ -83,9 +83,9 @@ def parse(opt_path, is_train=True):
             opt["logger"]["print_freq"] = 1
             opt["logger"]["save_checkpoint_freq"] = 8
     else:  # test
-        results_root = osp.join(opt["path"]["root"], "results", config_dir)
-        opt["path"]["results_root"] = osp.join(results_root, opt["name"])
-        opt["path"]["log"] = osp.join(results_root, opt["name"])
+        results_root = osp.join(opt["path"]["root"], "results", f"{opt['name']}_{get_timestamp()}")
+        opt["path"]["results_root"] = osp.join(results_root)
+        opt["path"]["log"] = osp.join(results_root)
 
     return opt
 

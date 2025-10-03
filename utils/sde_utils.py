@@ -201,6 +201,10 @@ class IRSDE(SDE):
         # need to pre-set mu and score_model
         return self.model(x, self.mu, t * scale, **kwargs)
 
+    def noise_fn_cond(self, x, mu, cond, t, scale=1.0, **kwargs):
+        # need to pre-set mu and score_model
+        return self.model(x, mu, cond, t * scale, **kwargs)
+
     # optimum x_{t-1}
     def reverse_optimum_step(self, xt, x0, t):
         A = torch.exp(-self.thetas[t] * self.dt)
@@ -300,6 +304,25 @@ class IRSDE(SDE):
         x = xt.clone()
         for t in tqdm(reversed(range(1, T + 1))):
             noise = self.noise_fn(x, t, self.sample_scale, **kwargs)
+            x = self.reverse_posterior_step(x, noise, t)
+
+            if save_states: # only consider to save 100 images
+                interval = self.T // 100
+                if t % interval == 0:
+                    idx = t // interval
+                    os.makedirs(save_dir, exist_ok=True)
+                    x_L, x_R = x.chunk(2, dim=1)
+                    tvutils.save_image(torch.cat([x_L, x_R], dim=3).data, f'{save_dir}/state_{idx}.png', normalize=False)
+
+        return x
+
+    def reverse_posterior_cond(self, xt, T=-1, cond=None, save_states=False, save_dir='posterior_state', **kwargs):
+        T = self.sample_T if T < 0 else T
+
+        x = xt.clone()
+        for t in tqdm(reversed(range(1, T + 1))):
+            # noise = self.noise_fn(x, t, self.sample_scale, **kwargs)
+            noise = self.noise_fn_cond(x, self.mu, cond, t, **kwargs)
             x = self.reverse_posterior_step(x, noise, t)
 
             if save_states: # only consider to save 100 images

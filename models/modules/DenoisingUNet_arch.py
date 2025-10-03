@@ -36,7 +36,8 @@ class ConditionalUNet(nn.Module):
 
         block_class = functools.partial(ResBlock, conv=default_conv, act=NonLinearity())
 
-        self.init_conv = default_conv(in_nc*2, nf, 7)
+        # self.init_conv = default_conv(in_nc*2, nf, 7)
+        self.init_conv = default_conv(in_nc*3, nf, 7)
         
         # time embeddings
         time_dim = nf * 4
@@ -118,13 +119,16 @@ class ConditionalUNet(nn.Module):
         x = F.pad(x, (0, mod_pad_w, 0, mod_pad_h), 'reflect')
         return x
 
-    def forward(self, xt, cond, time, text_context=None, image_context=None):
+    # def forward(self, xt, cond, time, text_context=None, image_context=None):
+    def forward(self, xt, mu, cond, time, text_context=None, image_context=None):
 
         if isinstance(time, int) or isinstance(time, float):
             time = torch.tensor([time]).to(xt.device)
         
-        x = xt - cond
-        x = torch.cat([x, cond], dim=1)
+        # x = xt - cond
+        # x = torch.cat([x, cond], dim=1)
+        x = xt - mu
+        x = torch.cat([x, mu, cond], dim=1)
 
         H, W = x.shape[2:]
         x = self.check_image_size(x, H, W)
