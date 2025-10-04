@@ -64,6 +64,6 @@ network_G:
 #### path
 path:
   root: ./
-  fs_pretrain_model_G: experiments/universal-ir_251002-105026/models/200000_G.pth
+  fs_pretrain_model_G: experiments/universal-ir_251003-154500/models/200000_G.pth
   ss_pretrain_model_G: experiments/universal-ir_251003-000914/models/540000_G.pth
   

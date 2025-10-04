@@ -128,10 +128,12 @@ for test_loader in test_loaders:
 
         visuals = model.get_current_visuals()
         SR_img = visuals["Output"]
-        output = util.tensor2img(SR_img.squeeze())  # uint8
-        LQ_ = util.tensor2img(visuals["Input"].squeeze())  # uint8
-        GT_ = util.tensor2img(visuals["GT"].squeeze())  # uint8
-        
+        # output = util.tensor2img(SR_img.squeeze())  # uint8
+        # LQ_ = util.tensor2img(visuals["Input"].squeeze())  # uint8
+        # GT_ = util.tensor2img(visuals["GT"].squeeze())  # uint8
+        output = util.tensor2img((SR_img.squeeze()+1.0)/2.0)  # uint8
+        LQ_ = util.tensor2img((visuals["Input"].squeeze()+1.0)/2.0)  # uint8
+        GT_ = util.tensor2img((visuals["GT"].squeeze()+1.0)/2.0)  # uint8
         suffix = opt["suffix"]
         if suffix:
             save_img_path = os.path.join(dataset_dir, img_name + suffix + ".png")
@@ -163,8 +165,10 @@ for test_loader in test_loaders:
 
             psnr = util.calculate_psnr(cropped_sr_img * 255, cropped_gt_img * 255)
             ssim = util.calculate_ssim(cropped_sr_img * 255, cropped_gt_img * 255)
+            # lp_score = lpips_fn(
+            #     GT.to(device) * 2 - 1, SR_img.to(device) * 2 - 1).squeeze().item()
             lp_score = lpips_fn(
-                GT.to(device) * 2 - 1, SR_img.to(device) * 2 - 1).squeeze().item()
+                GT.to(device), SR_img.to(device)).squeeze().item()
 
             test_results["psnr"].append(psnr)
             test_results["ssim"].append(ssim)

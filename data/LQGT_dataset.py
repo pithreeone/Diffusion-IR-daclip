@@ -145,6 +145,9 @@ class LQGTDataset(data.Dataset):
         img_GT = torch.from_numpy(np.ascontiguousarray(np.transpose(img_GT, (2, 0, 1)))).float()
         img_LR = torch.from_numpy(np.ascontiguousarray(np.transpose(img_LR, (2, 0, 1)))).float()
 
+        img_GT = img_GT * 2.0 - 1.0
+        img_LR = img_LR * 2.0 - 1.0
+
         return {"LQ": img_LR, "GT": img_GT, "LQ_clip": lq4clip, "LQ_path": LR_path, "GT_path": GT_path}
 
     def __len__(self):

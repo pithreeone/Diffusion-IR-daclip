@@ -312,10 +312,10 @@ def main():
                     model.test(sde)
                     visuals = model.get_current_visuals()
 
-                    output = util.tensor2img(visuals["Output"].squeeze())  # uint8
-                    gt_img = util.tensor2img(GT.squeeze())  # uint8
-                    lq_img = util.tensor2img(LQ.squeeze())
-                    fs_img = util.tensor2img(FS.squeeze())
+                    output = util.tensor2img((visuals["Output"].squeeze()+1.0)/2.0)  # uint8
+                    gt_img = util.tensor2img((GT.squeeze()+1.0)/2.0)  # uint8
+                    lq_img = util.tensor2img((LQ.squeeze()+1.0)/2.0)
+                    fs_img = util.tensor2img((FS.squeeze()+1.0)/2.0)
 
                     util.save_img(output, f'image/{idx}_{deg_type[0]}_SR.png')
                     util.save_img(gt_img, f'image/{idx}_{deg_type[0]}_GT.png')

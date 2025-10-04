@@ -6,7 +6,7 @@ model: denoising_ss
 # distortion: [motion-blurry,hazy,low-light,noisy,rainy]
 distortion: [rainy]
 # distortion: [motion-blurry]
-gpu_ids: [2,3]
+gpu_ids: [2, 3]
 
 sde:
   max_sigma: 50
@@ -28,23 +28,25 @@ datasets:
     name: Train_Dataset
     mode: MDFS
     dataroot: ../Warehouse/Diffusion-IR/datasets/train
-    first_stage_result: results/fs_result_rainTrainL/prediction
+    first_stage_result: results/fs_result_rainTrainL_-1_1/prediction
 
     use_shuffle: true
     n_workers: 16  # per GPU
     batch_size: 16
-    patch_size: 128
+    patch_size: 256
     use_flip: true
     use_rot: true
     color: RGB
+    normalize_01: False
   val:
     name: Val_Dataset
     mode: MDFS
     n_sample: 20
     dataroot: ../Warehouse/Diffusion-IR/datasets/daclip-val
-    first_stage_result: results/fs_result_rainTestL/prediction
+    first_stage_result: results/fs_result_rainTestL_-1_1/prediction
     # dataroot: ../Warehouse/Diffusion-IR/datasets/train
     # first_stage_result: results/fs_result_rainTrainL/prediction
+    normalize_01: False
 
 #### network structures
 network_G:
