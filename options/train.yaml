@@ -4,8 +4,9 @@ use_tb_logger: true
 model: denoising
 # distortion: [motion-blurry,hazy,jpeg-compressed,low-light,noisy,raindrop,rainy,shadowed,snowy,uncompleted]
 # distortion: [motion-blurry,hazy,low-light,noisy,rainy]
-distortion: [rainy]
-# distortion: [low-light]
+# distortion: [rainy]
+# distortion: [motion-blurry]
+distortion: [low-light]
 gpu_ids: [4, 5]
 
 sde:
@@ -39,7 +40,7 @@ datasets:
   val:
     name: Val_Dataset
     mode: MD
-    n_sample: 20
+    n_sample: 10
     dataroot: ../Warehouse/Diffusion-IR/datasets/daclip-val
 
 #### network structures

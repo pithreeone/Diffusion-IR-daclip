@@ -38,6 +38,7 @@ class DenoisingModelSS(BaseModel):
         for param in self.fs_model.parameters():
             param.requires_grad = False
         self.ss_model = networks.define_G(opt, in_ch_scale=3).to(self.device)
+        # self.ss_model = networks.define_G(opt, in_ch_scale=2).to(self.device)
         if opt["dist"]:
             self.ss_model = DistributedDataParallel(
                 self.ss_model, device_ids=[torch.cuda.current_device()]

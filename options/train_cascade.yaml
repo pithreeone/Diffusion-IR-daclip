@@ -5,11 +5,11 @@ model: denoising_ss
 # distortion: [motion-blurry,hazy,jpeg-compressed,low-light,noisy,raindrop,rainy,shadowed,snowy,uncompleted]
 # distortion: [motion-blurry,hazy,low-light,noisy,rainy]
 distortion: [rainy]
-# distortion: [low-light]
+# distortion: [motion-blurry]
 gpu_ids: [2,3]
 
 sde:
-  max_sigma: 10
+  max_sigma: 50
   T: 100
   schedule: cosine # linear, cosine
   eps: 0.005
