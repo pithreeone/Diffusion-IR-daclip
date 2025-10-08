@@ -2,7 +2,7 @@ name: universal-ir
 suffix: ~  # add suffix to saved images
 model: denoising
 # distortion: [motion-blurry,hazy,jpeg-compressed,low-light,noisy,raindrop,rainy,shadowed,snowy,uncompleted] # uncompleted means inpainting
-distortion: [noisy] # uncompleted means inpainting
+distortion: ~ # uncompleted means inpainting
 gpu_ids: [4]
 
 sde:
@@ -26,11 +26,11 @@ datasets:
   #  mode: LQGT
   #  dataroot_GT: test-data/denoising_testsets/CBSD68
   #  dataroot_LQ: test-data/denoising_testsets/CBSD68_25
-  # test2:
-  #   name: rainy
-  #   mode: LQGT
-  #   dataroot_GT: test-data/Rain100L/target
-  #   dataroot_LQ: test-data/Rain100L/input  
+  test2:
+    name: rainy
+    mode: LQGT
+    dataroot_GT: test-data/Rain100L/target
+    dataroot_LQ: test-data/Rain100L/input  
     # dataroot_GT: ../Warehouse/Diffusion-IR/datasets/test/Rain100H/target
     # dataroot_LQ: ../Warehouse/Diffusion-IR/datasets/test/Rain100H/input
     # dataroot_GT: ../Warehouse/Diffusion-IR/datasets/train/rainy/RainTrainL/GT
@@ -40,11 +40,11 @@ datasets:
   #  mode: LQGT
   #  dataroot_GT: test-data/SOTS/GT
   #  dataroot_LQ: test-data/SOTS/IN
-  test4:
-   name: motion-blurry
-   mode: LQGT
-   dataroot_GT: test-data/GoPro/target
-   dataroot_LQ: test-data/GoPro/input
+  # test4:
+  #  name: motion-blurry
+  #  mode: LQGT
+  #  dataroot_GT: test-data/GoPro/target
+  #  dataroot_LQ: test-data/GoPro/input
   # test5:
   #  name: low-light
   #  mode: LQGT

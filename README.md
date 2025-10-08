@@ -27,7 +27,7 @@ Modify parameters in `options/train.yaml`
 `python3 test.py --opt options/test.yaml`
 
 #### Configuration:
-Modify parameters in `options/train.yaml`
+Modify parameters in `options/test.yaml`
 - **`gpu_ids`**: List of GPU IDs to use.  
   *(Currently supports only a single GPU.)*
 
