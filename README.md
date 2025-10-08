@@ -24,7 +24,11 @@ Modify parameters in `options/train.yaml`
   *(Use the validation set provided in DA-CLIP.)*
 
 ### Test:
+Test model without da-clip embedding:
 `python3 test.py --opt options/test.yaml`
+
+Test model with da-clip embedding:
+`python3 test.py --opt options/test_daclip.yaml`
 
 #### Configuration:
 Modify parameters in `options/test.yaml`
@@ -32,6 +36,17 @@ Modify parameters in `options/test.yaml`
   *(Currently supports only a single GPU.)*
 
 - **`path.pretrain_model_G`**: Path to the pretrained generator model parameters.
+
+- **`datasets.test.dataroot_GT`**, **`datasets.test.dataroot_LQ`**:  
+  Paths to the HQ (ground truth) and LQ (degraded) testing datasets.
+
+Modify parameters in `options/test_daclip.yaml`
+- **`gpu_ids`**: List of GPU IDs to use.  
+  *(Currently supports only a single GPU.)*
+
+- **`path.pretrain_model_G`**: Path to the pretrained generator model parameters.
+
+- **`path.daclip`**: Path to the pretrained daclip model parameters.
 
 - **`datasets.test.dataroot_GT`**, **`datasets.test.dataroot_LQ`**:  
   Paths to the HQ (ground truth) and LQ (degraded) testing datasets.
