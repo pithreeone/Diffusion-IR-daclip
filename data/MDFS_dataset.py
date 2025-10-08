@@ -71,8 +71,22 @@ class MDFSDataset(data.Dataset):
                 LR_paths = util.get_image_paths(
                     opt["data_type"], os.path.join(opt["dataroot"], deg_type, 'LQ')
                 )  # LR list
-            FS_result_paths = util.get_image_paths(opt["data_type"], opt["first_stage_result"])
 
+            n = os.listdir(opt["first_stage_result"])
+
+            root = opt["first_stage_result"]
+
+            # list all subfolders
+            subfolders = [os.path.join(root, d) for d in os.listdir(root)]
+
+            # collect image paths from all subfolders
+            FS_result_paths = []
+            for sub in subfolders:
+                FS_result_paths += util.get_image_paths(opt["data_type"], sub)
+            GT_paths = GT_paths * len(subfolders)
+            LR_paths = LR_paths * len(subfolders)
+
+            # FS_result_paths = util.get_image_paths(opt["data_type"], opt["first_stage_result"])
             self.distortion[deg_type] = (GT_paths, LR_paths, FS_result_paths)
         self.data_lens = [len(self.distortion[deg_type][0]) for deg_type in self.deg_types]
 

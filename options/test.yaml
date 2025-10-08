@@ -2,8 +2,8 @@ name: universal-ir
 suffix: ~  # add suffix to saved images
 model: denoising
 # distortion: [motion-blurry,hazy,jpeg-compressed,low-light,noisy,raindrop,rainy,shadowed,snowy,uncompleted] # uncompleted means inpainting
-distortion: [rainy] # uncompleted means inpainting
-gpu_ids: [5]
+distortion: [noisy] # uncompleted means inpainting
+gpu_ids: [4]
 
 sde:
   max_sigma: 50
@@ -26,23 +26,25 @@ datasets:
   #  mode: LQGT
   #  dataroot_GT: test-data/denoising_testsets/CBSD68
   #  dataroot_LQ: test-data/denoising_testsets/CBSD68_25
-  test2:
-    name: rainy
-    mode: LQGT
-    # dataroot_GT: test-data/Rain100L/target
-    # dataroot_LQ: test-data/Rain100L/input
-    dataroot_GT: ../Warehouse/Diffusion-IR/datasets/train/rainy/RainTrainL/GT
-    dataroot_LQ: ../Warehouse/Diffusion-IR/datasets/train/rainy/RainTrainL/LQ
+  # test2:
+  #   name: rainy
+  #   mode: LQGT
+  #   dataroot_GT: test-data/Rain100L/target
+  #   dataroot_LQ: test-data/Rain100L/input  
+    # dataroot_GT: ../Warehouse/Diffusion-IR/datasets/test/Rain100H/target
+    # dataroot_LQ: ../Warehouse/Diffusion-IR/datasets/test/Rain100H/input
+    # dataroot_GT: ../Warehouse/Diffusion-IR/datasets/train/rainy/RainTrainL/GT
+    # dataroot_LQ: ../Warehouse/Diffusion-IR/datasets/train/rainy/RainTrainL/LQ
   # test3:
   #  name: hazy
   #  mode: LQGT
   #  dataroot_GT: test-data/SOTS/GT
-  #  dataroot_LQ: test-data/SOTS/GT
-  # test4:
-  #  name: motion-blurry
-  #  mode: LQGT
-  #  dataroot_GT: test-data/GoPro/target
-  #  dataroot_LQ: test-data/GoPro/input
+  #  dataroot_LQ: test-data/SOTS/IN
+  test4:
+   name: motion-blurry
+   mode: LQGT
+   dataroot_GT: test-data/GoPro/target
+   dataroot_LQ: test-data/GoPro/input
   # test5:
   #  name: low-light
   #  mode: LQGT
@@ -68,5 +70,6 @@ path:
   # pretrain_model_G: log/500000_G.pth
   # pretrain_model_G: log/universal-ir/models/lastest_EMA.pth
   # pretrain_model_G: experiments/universal-ir_251002-105026/models/200000_G.pth
-  pretrain_model_G: experiments/universal-ir_251003-154500/models/360000_G.pth
+  # pretrain_model_G: experiments/universal-ir_251003-154500/models/360000_G.pth
+  pretrain_model_G: experiments/universal-ir_251006-165812/models/600000_G.pth
   # daclip: pretrained/daclip_ViT-B-32.pt
