@@ -1,13 +1,13 @@
 #### general settings
-name: universal-ir
+name: feedforward-ir
 use_tb_logger: true
-model: denoising
+model: ff_model
 # distortion: [motion-blurry,hazy,jpeg-compressed,low-light,noisy,raindrop,rainy,shadowed,snowy,uncompleted]
 distortion: [motion-blurry,hazy,low-light,noisy,rainy]
 # distortion: [rainy]
 # distortion: [motion-blurry]
 # distortion: [low-light]
-gpu_ids: [0,1]
+gpu_ids: [4,5]
 
 sde:
   max_sigma: 50
@@ -31,8 +31,8 @@ datasets:
     dataroot: ../Warehouse/Diffusion-IR/datasets/train
 
     use_shuffle: true
-    n_workers: 16  # per GPU
-    batch_size: 16
+    n_workers: 4  # per GPU
+    batch_size: 8
     patch_size: 256
     use_flip: true
     use_rot: true
@@ -40,21 +40,22 @@ datasets:
   val:
     name: Val_Dataset
     mode: MD
-    n_sample: 20
+    n_sample: 100
     dataroot: ../Warehouse/Diffusion-IR/datasets/daclip-val
 
 #### network structures
 network_G:
-  which_model_G: ConditionalUNet
+  which_model_G: UNet
   setting:
     in_nc: 3
     out_nc: 3
     nf: 128
-    ch_mult: [1, 2, 4, 8]
+    ch_mult: [1, 2, 4, 4]
     context_dim: 512
     use_daclip_context: false
     # use_degra_context: true
     # use_image_context: true
+    in_ch_scale: 1
 
 #### path
 path:
@@ -66,28 +67,37 @@ path:
 
 #### training settings: learning rate scheme, loss
 train:
-  optimizer: AdamW # Adam, AdamW, Lion
-  lr_G: !!float 2e-4
+  optimizer: Adam # Adam, AdamW, Lion
+  lr_G: !!float 1e-4
   lr_scheme: TrueCosineAnnealingLR # MultiStepLR
-  beta1: 0.9
-  beta2: 0.99
+  beta1: 0.5
+  beta2: 0.9
   niter: 700000
   warmup_iter: -1  # no warm up
   lr_steps: [200000, 400000, 600000]
   lr_gamma: 0.5
-  eta_min: !!float 1e-6
+  eta_min: !!float 1e-5
 
   # criterion
   is_weighted: False
   loss_type: l1
   weight: 1.0
 
+  loss_config:
+    target: models.losses.GeneralLPIPSWithDiscriminator
+    params:
+      perceptual_weight: 0.25
+      disc_start: 20001
+      disc_weight: 0.5
+      learn_logvar: True
+
+      regularization_weights:
+        kl_loss: 1.0
+
   manual_seed: 0
-  val_freq: !!float 4e4
-
-
+  val_freq: !!float 1e4
 
 #### logger
 logger:
   print_freq: 200
-  save_checkpoint_freq: !!float 4e4
+  save_checkpoint_freq: !!float 1e4

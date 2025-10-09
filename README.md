@@ -1,5 +1,10 @@
 ## How to Run
-### Train:
+### Train (Feed-forward model)
+- multiple GPU:
+  `torchrun --nproc_per_node=2 --master_port=4321 train_ff.py --opt=options/train_ff.yaml --launcher pytorch`
+
+
+### Train (Diffusion-IR):
 
 - single GPU: 
  `python3 train.py --opt options/train.yaml`

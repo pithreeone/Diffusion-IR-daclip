@@ -19,6 +19,9 @@ import utils as util
 from data import create_dataloader, create_dataset
 from data.util import bgr2ycbcr
 
+from torch.utils.data import Subset
+from itertools import islice
+
 #### options
 parser = argparse.ArgumentParser()
 parser.add_argument("--opt", type=str, required=True, help="Path to options YMAL file.")
@@ -57,6 +60,7 @@ for phase, dataset_opt in sorted(opt["datasets"].items()):
     dataset_opt["normalize_to_neg1_1"] = normalize_to_neg1_1
     test_set = create_dataset(dataset_opt)
     test_loader = create_dataloader(test_set, dataset_opt)
+    # test_loader = test_loader[2000]
     logger.info(
         "Number of test images in [{:s}]: {:d}".format(
             dataset_opt["name"], len(test_set)
@@ -146,10 +150,11 @@ for test_loader in test_loaders:
         util.save_img(output, save_img_path)
 
         # remove it if you only want to save output images
-        LQ_img_path = os.path.join(dataset_dir, img_name + "_LQ.png")
-        GT_img_path = os.path.join(dataset_dir, img_name + "_HQ.png")
-        util.save_img(LQ_, LQ_img_path)
-        util.save_img(GT_, GT_img_path)
+        if opt["save_lqgt"]:
+            LQ_img_path = os.path.join(dataset_dir, img_name + "_LQ.png")
+            GT_img_path = os.path.join(dataset_dir, img_name + "_HQ.png")
+            util.save_img(LQ_, LQ_img_path)
+            util.save_img(GT_, GT_img_path)
 
         if need_GT:
             gt_img = GT_ / 255.0
