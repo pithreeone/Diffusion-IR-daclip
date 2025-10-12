@@ -135,8 +135,8 @@ class DenoisingModelSS(BaseModel):
         self.image_context = image_context
 
     def optimize_parameters(self, step, timesteps, sde=None):
-        # sde.set_mu(self.condition)
-        sde.set_mu(self.first_stage_result)
+        sde.set_mu(self.condition)
+        # sde.set_mu(self.first_stage_result)
 
         self.optimizer.zero_grad()
 
@@ -144,7 +144,8 @@ class DenoisingModelSS(BaseModel):
 
         # Get noise and score
         # noise = sde.noise_fn(self.state, timesteps.squeeze(), text_context=self.text_context, image_context=self.image_context)
-        noise = sde.noise_fn_cond(self.state, self.first_stage_result, self.condition, timesteps.squeeze(), text_context=self.text_context, image_context=self.image_context)
+        # noise = sde.noise_fn_cond(self.state, self.first_stage_result, self.condition, timesteps.squeeze(), text_context=self.text_context, image_context=self.image_context)
+        noise = sde.noise_fn_cond(self.state, self.condition, self.first_stage_result, timesteps.squeeze())
         score = sde.get_score_from_noise(noise, timesteps)
 
         # Learning the maximum likelihood objective for state x_{t-1}
@@ -166,9 +167,11 @@ class DenoisingModelSS(BaseModel):
             if mode == 'sde':
                 self.output = sde.reverse_sde(self.state, save_states=save_states, text_context=self.text_context, image_context=self.image_context)
             elif mode == 'posterior':
-                sde.set_mu(self.first_stage_result)
+                # sde.set_mu(self.first_stage_result)
+                sde.set_mu(self.condition)
                 # self.output = sde.reverse_posterior(self.state, save_states=save_states, text_context=self.text_context, image_context=self.image_context)
-                self.output = sde.reverse_posterior_cond(self.state, cond=self.condition, save_states=save_states, text_context=self.text_context, image_context=self.image_context)
+                # self.output = sde.reverse_posterior_cond(self.state, cond=self.condition, save_states=save_states, text_context=self.text_context, image_context=self.image_context)
+                self.output = sde.reverse_posterior_cond(self.state, cond=self.first_stage_result, save_states=save_states)
             elif mode == 'posterior_test':
                 # First stage prediction
                 sde.set_model(self.fs_model)

@@ -5,8 +5,8 @@ import os
 import random
 import sys
 import copy
-
 from tqdm import tqdm
+
 import cv2
 import numpy as np
 import torch
@@ -14,13 +14,13 @@ import torch.distributed as dist
 import torch.multiprocessing as mp
 from torch.utils.data import Subset
 # from IPython import embed
+from torch.utils.tensorboard import SummaryWriter
 
 # import open_clip
 
 import options as option
 from models import create_model
 
-# sys.path.insert(0, "../../")
 import open_clip
 import utils as util
 from data import create_dataloader, create_dataset
@@ -50,15 +50,20 @@ def main():
     #### setup options of three networks
     parser = argparse.ArgumentParser()
     parser.add_argument("--opt", type=str, help="Path to option YMAL file.")
+    # parser.add_argument("--opt_ff", type=str, help="Path to option YMAL file.")
     parser.add_argument(
         "--launcher", choices=["none", "pytorch"], default="none", help="job launcher"
     )
     parser.add_argument("--local-rank", type=int, default=0)
     args = parser.parse_args()
     opt = option.parse(args.opt, is_train=True)
+    opt_ff = option.simple_parse("options/ff.yaml")
 
     # convert to NoneDict, which returns None for missing keys
     opt = option.dict_to_nonedict(opt)
+    opt_ff = option.dict_to_nonedict(opt_ff)
+
+    # opt_ff["gpu_ids"] = opt["gpu_ids"]
 
     # choose small opt for SFTMD test, fill path of pre-trained model_F
     #### set random seed
@@ -71,6 +76,7 @@ def main():
         rank = -1
         print("Disabled distributed training.")
     else:
+        opt_ff["dist"] = True
         opt["dist"] = True
         opt["dist"] = True
         init_dist()
@@ -133,8 +139,6 @@ def main():
         logger.info(option.dict2str(opt))
         # tensorboard logger
         if opt["use_tb_logger"] and "debug" not in opt["name"]:
-            from torch.utils.tensorboard import SummaryWriter
-
             tb_logger = SummaryWriter(log_dir="{}/tb_logger/".format(opt["path"]["experiments_root"]))
     else:
         util.setup_logger(
@@ -144,13 +148,13 @@ def main():
 
 
     #### create train and val dataloader
-    dataset_ratio = 20  # enlarge the size of each epoch
+    dataset_ratio = 100  # enlarge the size of each epoch
     for phase, dataset_opt in opt["datasets"].items():
         if phase == "train":
             train_set = create_dataset(dataset_opt)
             train_size = int(math.ceil(len(train_set) / dataset_opt["batch_size"]))
             total_iters = int(opt["train"]["niter"])
-            total_epochs = int(math.ceil(total_iters / (train_size * dataset_ratio)))
+            total_epochs = int(math.ceil(total_iters / train_size))
             print(f"total epochs: {total_epochs}")
             if opt["dist"]:
                 train_sampler = DistIterSampler(
@@ -177,7 +181,8 @@ def main():
             testset_config = "options/eval5d.yaml"
             # val_set = get_testsets(testset_config, process_mode='val')
             val_set = create_dataset(dataset_opt)
-            val_set = Subset(val_set, range(opt['datasets']['val']['n_sample']))
+            if opt['datasets']['val']['n_sample'] is not None:
+                val_set = Subset(val_set, range(opt['datasets']['val']['n_sample']))
             val_loader = create_dataloader(val_set, dataset_opt, opt, None)
             if rank <= 0:
                 logger.info(
@@ -191,8 +196,17 @@ def main():
     assert val_loader is not None
 
     #### create model
-    model = create_model(opt) 
+    model = create_model(opt)
+    # model_ff = create_model(opt_ff)
     device = model.device
+
+    # clip_model, _preprocess = clip.load("ViT-B/32", device=device)
+    if opt['path']['daclip'] is not None:
+        clip_model, preprocess = open_clip.create_model_from_pretrained('daclip_ViT-B-32', pretrained=opt['path']['daclip'])
+    else:
+        clip_model, _, preprocess = open_clip.create_model_and_transforms('ViT-B-32', pretrained='laion2b_s34b_b79k')
+    tokenizer = open_clip.get_tokenizer('ViT-B-32')
+    clip_model = clip_model.to(device)
 
     #### resume training
     if resume_state:
@@ -208,6 +222,9 @@ def main():
     else:
         current_step = 0
         start_epoch = 0
+
+    sde = util.IRSDE(max_sigma=opt["sde"]["max_sigma"], T=opt["sde"]["T"], schedule=opt["sde"]["schedule"], eps=opt["sde"]["eps"], device=device)
+    sde.set_model(model.ss_model)
 
     scale = opt['degradation']['scale']
 
@@ -226,17 +243,45 @@ def main():
     for epoch in range(start_epoch, total_epochs + 2):
         if opt["dist"]:
             train_sampler.set_epoch(epoch)
-        for _, train_data in tqdm(enumerate(train_loader), total=len(train_loader)):
+        for _, train_data in tqdm(enumerate(train_loader),  total=len(train_loader), leave=False):
             current_step += 1
 
             if current_step > total_iters:
                 break
 
-            LQ, GT, deg_type = train_data["LQ"], train_data["GT"], train_data["type"]
+            LQ, GT, FS, deg_type = train_data["LQ"], train_data["GT"], train_data["FS"], train_data["type"]
+            # model_ff.feed_data(LQ)
+            # FS = model_ff.test()
 
-            model.feed_data(LQ, GT) # xt, mu, x0
+            # output = util.tensor2img((FS+1.0)/2.0)  # uint8
+            # util.save_img(output, f'image/{current_step}.png')
 
-            model.optimize_parameters(current_step)
+            # timesteps, states = sde.generate_random_states(x0=GT, mu=FS)
+            timesteps, states = sde.generate_random_states(x0=GT, mu=LQ)
+
+            # gt_img = util.tensor2img(GT.squeeze())
+            # lq_img = util.tensor2img(LQ.squeeze())
+            # fs_img = util.tensor2img(FS.squeeze())
+            # states_img = util.tensor2img(states.squeeze())
+
+            # util.save_img(gt_img, f'image/{current_step}_{deg_type[0]}_GT.png')
+            # util.save_img(lq_img, f'image/{current_step}_{deg_type[0]}_LQ.png')
+            # util.save_img(fs_img, f'image/{current_step}_{deg_type[0]}_FS.png')
+            # util.save_img(states_img, f'image/{current_step}_{deg_type[0]}_states.png')
+
+            if use_daclip_context:
+                deg_token = tokenizer(deg_type).to(device)
+                img4clip = train_data["LQ_clip"].to(device)
+                with torch.no_grad(), torch.cuda.amp.autocast():
+                    image_context, degra_context = clip_model.encode_image(img4clip, control=True)
+                    image_context = image_context.float()
+                    degra_context = degra_context.float()
+                model.feed_data(states, LQ, GT, text_context=degra_context, image_context=image_context) # xt, mu, x0
+            else:
+                # model.feed_data(states, LQ, GT) # xt, mu, x0
+                model.feed_data(states, LQ, GT=GT, FS=FS) # xt, mu, x0
+
+            model.optimize_parameters(current_step, timesteps, sde)
             model.update_learning_rate(
                 current_step, warmup_iter=opt["train"]["warmup_iter"]
             )
@@ -259,46 +304,68 @@ def main():
             if current_step % opt["train"]["val_freq"] == 0 and rank <= 0:
                 torch.cuda.empty_cache()
                 avg_psnr = 0.0
+                avg_psnr_fs = 0.0    # baseline: first stage
                 idx = 0
                 for _, val_data in enumerate(val_loader):
 
-                    LQ, GT, deg_type = val_data["LQ"], val_data["GT"], val_data["type"]
-                    model.feed_data(LQ, GT)
+                    LQ, GT, FS, deg_type = val_data["LQ"], val_data["GT"], val_data["FS"], val_data["type"]
+                    # model_ff.feed_data(LQ)
+                    # FS = model_ff.test()
+                    # noisy_state = sde.noise_state(FS)
+                    noisy_state = sde.noise_state(LQ)
 
-                    model.test()
+                    # valid Predictor
+                    if use_daclip_context:
+                        deg_token = tokenizer(deg_type).to(device)
+                        img4clip = val_data["LQ_clip"].to(device)
+                        with torch.no_grad(), torch.cuda.amp.autocast():
+                            image_context, degra_context = clip_model.encode_image(img4clip, control=True)
+                            image_context = image_context.float()
+                            degra_context = degra_context.float()
+                        model.feed_data(noisy_state, LQ, GT, text_context=degra_context, image_context=image_context)
+                    else:
+                        # model.feed_data(noisy_state, LQ, GT)
+                        model.feed_data(noisy_state, LQ, GT=GT, FS=FS) # xt, mu, x0
+
+                    model.test(sde)
                     visuals = model.get_current_visuals()
 
                     output = util.tensor2img((visuals["Output"].squeeze()+1.0)/2.0)  # uint8
                     gt_img = util.tensor2img((GT.squeeze()+1.0)/2.0)  # uint8
                     lq_img = util.tensor2img((LQ.squeeze()+1.0)/2.0)
+                    fs_img = util.tensor2img((FS.squeeze()+1.0)/2.0)
 
                     util.save_img(output, f'image/{idx}_{deg_type[0]}_SR.png')
                     util.save_img(gt_img, f'image/{idx}_{deg_type[0]}_GT.png')
                     util.save_img(lq_img, f'image/{idx}_{deg_type[0]}_LQ.png')
+                    util.save_img(fs_img, f'image/{idx}_{deg_type[0]}_FS.png')
 
                     # calculate PSNR
                     avg_psnr += util.calculate_psnr(output, gt_img)
+                    avg_psnr_fs += util.calculate_psnr(fs_img, gt_img)
                     idx += 1
 
                     if idx > 99:
                         break
 
                 avg_psnr = avg_psnr / idx
+                avg_psnr_fs = avg_psnr_fs / idx
 
                 if avg_psnr > best_psnr:
                     best_psnr = avg_psnr
                     best_iter = current_step
+                    best_psnr_fs = avg_psnr_fs
 
                 # log
-                logger.info("# Validation # PSNR: {:.6f}, Best PSNR: {:.6f}| Iter: {}".format(avg_psnr, best_psnr, best_iter))
+                logger.info("# Validation # PSNR: {:.6f}, Best PSNR: {:.6f}, PSNR (FS): {:.6f}| Iter: {}".format(avg_psnr, best_psnr, avg_psnr_fs, best_iter))
                 logger_val = logging.getLogger("val")  # validation logger
                 logger_val.info(
-                    "<epoch:{:3d}, iter:{:8,d}, psnr: {:.6f}".format(
-                        epoch, current_step, avg_psnr
+                    "<epoch:{:3d}, iter:{:8,d}, psnr: {:.6f}, psnr_fs: {:.6f}".format(
+                        epoch, current_step, avg_psnr, avg_psnr_fs
                     )
                 )
-                print("<epoch:{:3d}, iter:{:8,d}, psnr: {:.6f}".format(
-                        epoch, current_step, avg_psnr
+                print("<epoch:{:3d}, iter:{:8,d}, psnr: {:.6f}, psnr_fs: {:.6f}".format(
+                        epoch, current_step, avg_psnr, avg_psnr_fs
                     ))
                 # tensorboard logger
                 if opt["use_tb_logger"] and "debug" not in opt["name"]:
@@ -317,7 +384,7 @@ def main():
         logger.info("Saving the final model.")
         model.save("latest")
         logger.info("End of Predictor and Corrector training.")
-    tb_logger.close()
+        tb_logger.close()
 
 
 if __name__ == "__main__":

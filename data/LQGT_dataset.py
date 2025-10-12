@@ -54,7 +54,7 @@ class LQGTDataset(data.Dataset):
                 len(self.LR_paths), len(self.GT_paths)
             )
         self.random_scale_list = [1]
-        self.skip = 2500
+        self.skip = 1800
 
     def _init_lmdb(self):
         # https://github.com/chainer/chainermn/issues/129
@@ -155,4 +155,5 @@ class LQGTDataset(data.Dataset):
         return {"LQ": img_LR, "GT": img_GT, "LQ_clip": lq4clip, "LQ_path": LR_path, "GT_path": GT_path}
 
     def __len__(self):
+        # return len(self.GT_paths)
         return len(self.GT_paths) - self.skip

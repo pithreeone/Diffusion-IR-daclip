@@ -1,3 +1,4 @@
+import logging
 from collections import OrderedDict
 
 import torch
@@ -11,6 +12,7 @@ from models.util import instantiate_from_config
 
 from .base_model import BaseModel
 
+logger = logging.getLogger("base")
 
 class FeedForwardModel(BaseModel):
     def __init__(self, opt):
@@ -21,16 +23,21 @@ class FeedForwardModel(BaseModel):
             self.rank = -1
         train_opt = opt["train"]
 
+        if self.rank != -1:
+            self.device = torch.device(f"cuda:{self.rank}")
+        
         self.model = networks.define_G(opt).to(self.device)
+        # opt["dist"] = False
         if opt["dist"]:
             self.model = DistributedDataParallel(
                 self.model, device_ids=[torch.cuda.current_device()]
             )
         else:
             self.model = DataParallel(self.model)
+        
         self.load()
 
-        self.loss: torch.nn.Module = instantiate_from_config(opt["train"]["loss_config"]).to(self.device)
+        # self.loss: torch.nn.Module = instantiate_from_config(opt["train"]["loss_config"]).to(self.device)
 
         if self.is_train:
             self.model.train()
@@ -106,6 +113,7 @@ class FeedForwardModel(BaseModel):
             self.log_dict = OrderedDict()
 
     def feed_data(self, input, target=None):
+        # print(self.device)
         self.input = input.to(self.device)    # noisy_state
         # self.condition = LQ.to(self.device)  # LQ
         if target is not None:
@@ -114,22 +122,23 @@ class FeedForwardModel(BaseModel):
     def optimize_parameters(self, step):
         self.optimizer.zero_grad()
 
+        # print(self.inpu)
         output = self.model(self.input)
 
-        optimizer_idx = 0
-        if hasattr(self.loss, "forward_keys"):
-            extra_info = {
-                # "z": z,
-                "optimizer_idx": optimizer_idx,
-                "global_step": step,
-                "last_layer": self.get_last_layer(),
-                "split": "train",
-                # "regularization_log": regularization_log,
-                "autoencoder": self,
-            }
-            extra_info = {k: extra_info[k] for k in self.loss.forward_keys}
-        else:
-            extra_info = dict()
+        # optimizer_idx = 0
+        # if hasattr(self.loss, "forward_keys"):
+        #     extra_info = {
+        #         # "z": z,
+        #         "optimizer_idx": optimizer_idx,
+        #         "global_step": step,
+        #         "last_layer": self.get_last_layer(),
+        #         "split": "train",
+        #         # "regularization_log": regularization_log,
+        #         "autoencoder": self,
+        #     }
+        #     extra_info = {k: extra_info[k] for k in self.loss.forward_keys}
+        # else:
+        #     extra_info = dict()
 
         loss = self.loss_fn(output, self.target)
         # loss, log = self.loss(self.target, output, **extra_info)
@@ -144,11 +153,18 @@ class FeedForwardModel(BaseModel):
         # self.log_dict.update(log)
 
     def test(self):
+
+        # print(self.device)
+        self.input = self.input.to(next(self.model.parameters()).device)
         self.model.eval()
+        # print(next(self.model.parameters()).device)
+        # print(self.input.device)
         with torch.no_grad():
             self.output = self.model(self.input)
         
         self.model.train()
+
+        return self.output
 
     def load(self):
         load_path_G = self.opt["path"]["pretrain_model_G"]

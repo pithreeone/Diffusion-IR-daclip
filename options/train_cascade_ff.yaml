@@ -1,10 +1,12 @@
 #### general settings
-name: feedforward-ir
+name: universal-ir
 use_tb_logger: true
-model: ff_model
+model: denoising_ss
 # distortion: [motion-blurry,hazy,jpeg-compressed,low-light,noisy,raindrop,rainy,shadowed,snowy,uncompleted]
 distortion: [motion-blurry,hazy,low-light,noisy,rainy]
-gpu_ids: [4,5]
+# distortion: [rainy]
+# distortion: [motion-blurry]
+gpu_ids: [2,3]
 
 sde:
   max_sigma: 50
@@ -24,77 +26,75 @@ degradation: # for some synthetic dataset that only have GTs
 datasets:
   train:
     name: Train_Dataset
-    mode: MD
+    mode: MDFS
     dataroot: ../Warehouse/Diffusion-IR/datasets/train
+    first_stage_result: results/fs_result_ff_train
+    # first_stage_result: results/fs_result_rainTrainL_-1_1/prediction
+    # first_stage_result: results/fs_result_rainTrainL_-1_1_all
 
     use_shuffle: true
     n_workers: 4  # per GPU
-    batch_size: 8
-    patch_size: 128
+    batch_size: 16
+    patch_size: 256
     use_flip: true
     use_rot: true
     color: RGB
+    normalize_01: false
   val:
     name: Val_Dataset
-    mode: MD
-    n_sample: 100
+    mode: MDFS
+    n_sample: 20
     dataroot: ../Warehouse/Diffusion-IR/datasets/daclip-val
+    first_stage_result: results/fs_result_ff_test
+    # dataroot: ../Warehouse/Diffusion-IR/datasets/train
+    # first_stage_result: results/fs_result_rainTestL_-1_1/prediction
+    # first_stage_result: results/fs_result_rainTestL_-1_1_all
+    normalize_01: false
 
 #### network structures
 network_G:
-  which_model_G: UNet
+  which_model_G: ConditionalUNet
   setting:
     in_nc: 3
     out_nc: 3
-    nf: 128
-    ch_mult: [1, 2, 4, 4]
+    nf: 64
+    ch_mult: [1, 2, 4, 8]
     context_dim: 512
     use_daclip_context: false
     # use_degra_context: true
     # use_image_context: true
-    in_ch_scale: 1
 
 #### path
 path:
   root: ./
   pretrain_model_G: ~
+  # pretrain_model_G: experiments/universal-ir_251002-213523/models/lastest_EMA.pth
   strict_load: true
   resume_state: ~
   daclip: pretrained/daclip_ViT-B-32.pt
 
 #### training settings: learning rate scheme, loss
 train:
-  optimizer: Adam # Adam, AdamW, Lion
-  lr_G: !!float 1e-4
+  optimizer: AdamW # Adam, AdamW, Lion
+  lr_G: !!float 2e-4 # 2e-4
   lr_scheme: TrueCosineAnnealingLR # MultiStepLR
-  beta1: 0.5
-  beta2: 0.9
+  beta1: 0.9
+  beta2: 0.99
   niter: 700000
   warmup_iter: -1  # no warm up
   lr_steps: [200000, 400000, 600000]
   lr_gamma: 0.5
-  eta_min: !!float 1e-5
+  eta_min: !!float 1e-6
 
   # criterion
   is_weighted: False
   loss_type: l1
   weight: 1.0
 
-  loss_config:
-    target: models.losses.GeneralLPIPSWithDiscriminator
-    params:
-      perceptual_weight: 0.25
-      disc_start: 20001
-      disc_weight: 0.5
-      learn_logvar: True
-
-      regularization_weights:
-        kl_loss: 1.0
-
   manual_seed: 0
-  val_freq: !!float 4e4
+  val_freq: !!float 2e4
 
 #### logger
 logger:
   print_freq: 200
-  save_checkpoint_freq: !!float 4e4
+  save_checkpoint_freq: !!float 2e4
