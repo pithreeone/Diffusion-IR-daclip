@@ -54,7 +54,7 @@ class LQGTDataset(data.Dataset):
                 len(self.LR_paths), len(self.GT_paths)
             )
         self.random_scale_list = [1]
-        self.skip = 1800
+        # self.skip = 1800
 
     def _init_lmdb(self):
         # https://github.com/chainer/chainermn/issues/129
@@ -74,7 +74,7 @@ class LQGTDataset(data.Dataset):
         )
 
     def __getitem__(self, index):
-        index += self.skip
+        # index += self.skip
         if self.opt["data_type"] == "lmdb":
             if (self.GT_env is None) or (self.LR_env is None):
                 self._init_lmdb()
@@ -147,13 +147,14 @@ class LQGTDataset(data.Dataset):
         img_GT = torch.from_numpy(np.ascontiguousarray(np.transpose(img_GT, (2, 0, 1)))).float()
         img_LR = torch.from_numpy(np.ascontiguousarray(np.transpose(img_LR, (2, 0, 1)))).float()
 
-        self.normalize_to_neg1_1 = self.opt["normalize_to_neg1_1"]
-        if self.normalize_to_neg1_1:
-            img_GT = img_GT * 2.0 - 1.0
-            img_LR = img_LR * 2.0 - 1.0
+        # self.normalize_to_neg1_1 = self.opt["normalize_to_neg1_1"]
+        # if self.normalize_to_neg1_1:
+        img_GT = img_GT * 2.0 - 1.0
+        img_LR = img_LR * 2.0 - 1.0
 
         return {"LQ": img_LR, "GT": img_GT, "LQ_clip": lq4clip, "LQ_path": LR_path, "GT_path": GT_path}
 
     def __len__(self):
-        # return len(self.GT_paths)
-        return len(self.GT_paths) - self.skip
+        return len(self.GT_paths)
+        # return 250
+        # return len(self.GT_paths) - self.skip

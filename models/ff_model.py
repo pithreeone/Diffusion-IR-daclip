@@ -124,6 +124,7 @@ class FeedForwardModel(BaseModel):
 
         # print(self.inpu)
         output = self.model(self.input)
+        # output = self.model(self.target)
 
         # optimizer_idx = 0
         # if hasattr(self.loss, "forward_keys"):
@@ -161,6 +162,7 @@ class FeedForwardModel(BaseModel):
         # print(self.input.device)
         with torch.no_grad():
             self.output = self.model(self.input)
+            # self.output = self.model(self.target)
         
         self.model.train()
 

@@ -168,6 +168,7 @@ class DenoisingModelSS(BaseModel):
                 self.output = sde.reverse_sde(self.state, save_states=save_states, text_context=self.text_context, image_context=self.image_context)
             elif mode == 'posterior':
                 # sde.set_mu(self.first_stage_result)
+                sde.set_model(self.ss_model)
                 sde.set_mu(self.condition)
                 # self.output = sde.reverse_posterior(self.state, save_states=save_states, text_context=self.text_context, image_context=self.image_context)
                 # self.output = sde.reverse_posterior_cond(self.state, cond=self.condition, save_states=save_states, text_context=self.text_context, image_context=self.image_context)
