@@ -5,6 +5,7 @@ import os
 import random
 import sys
 import copy
+from tqdm import tqdm
 
 import cv2
 import numpy as np
@@ -244,7 +245,7 @@ def main():
     for epoch in range(start_epoch, total_epochs + 2):
         if opt["dist"]:
             train_sampler.set_epoch(epoch)
-        for _, train_data in enumerate(train_loader):
+        for _, train_data in tqdm(enumerate(train_loader), total=len(train_loader)):
             current_step += 1
 
             if current_step > total_iters:

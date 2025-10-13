@@ -6,7 +6,7 @@ model: denoising_ss
 distortion: [motion-blurry,hazy,low-light,noisy,rainy]
 # distortion: [rainy]
 # distortion: [motion-blurry]
-gpu_ids: [2,3]
+gpu_ids: [4, 5]
 
 sde:
   max_sigma: 50

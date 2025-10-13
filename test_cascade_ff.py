@@ -154,8 +154,9 @@ for test_loader in test_loaders:
         # remove it if you only want to save output images
         LQ_img_path = os.path.join(dataset_dir, img_name + "_LQ.png")
         GT_img_path = os.path.join(dataset_dir, img_name + "_HQ.png")
-        util.save_img(LQ_, LQ_img_path)
-        util.save_img(GT_, GT_img_path)
+        if opt["save_lqgt"]:
+            util.save_img(LQ_, LQ_img_path)
+            util.save_img(GT_, GT_img_path)
 
         if need_GT:
             gt_img = GT_ / 255.0

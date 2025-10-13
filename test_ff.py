@@ -77,6 +77,9 @@ lpips_fn = lpips.LPIPS(net='alex').to(device)
 scale = opt['degradation']['scale']
 sampling_mode = opt["sde"]["sampling_mode"]
 
+#### Set seed
+util.seed_everything()
+
 for test_loader in test_loaders:
     test_set_name = test_loader.dataset.opt["name"]  # path opt['']
     logger.info("\nTesting [{:s}]...".format(test_set_name))

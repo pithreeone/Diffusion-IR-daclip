@@ -129,7 +129,8 @@ class ConditionalUNet(nn.Module):
         # x = torch.cat([x, cond], dim=1)
         x = xt - mu
         if cond is not None:
-            x = torch.cat([x, mu, cond-mu], dim=1)
+            # x = torch.cat([x, mu, cond-mu], dim=1)
+            x = torch.cat([x, mu, cond], dim=1)
             # x = torch.cat([x, cond, mu-cond], dim=1)
             # x = torch.cat([x, mu, mu-cond], dim=1)
         else:

@@ -3,8 +3,9 @@ suffix: ~  # add suffix to saved images
 model: denoising_ss
 # distortion: [motion-blurry,hazy,jpeg-compressed,low-light,noisy,raindrop,rainy,shadowed,snowy,uncompleted] # uncompleted means inpainting
 distortion: [rainy] # uncompleted means inpainting
-gpu_ids: [5]
+gpu_ids: [0]
 # normalize_to_neg1_1: true
+save_lqgt: false
 
 sde:
   max_sigma: 50

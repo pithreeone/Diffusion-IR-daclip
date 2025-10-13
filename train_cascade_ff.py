@@ -256,8 +256,8 @@ def main():
             # output = util.tensor2img((FS+1.0)/2.0)  # uint8
             # util.save_img(output, f'image/{current_step}.png')
 
-            # timesteps, states = sde.generate_random_states(x0=GT, mu=FS)
-            timesteps, states = sde.generate_random_states(x0=GT, mu=LQ)
+            timesteps, states = sde.generate_random_states(x0=GT, mu=FS)
+            # timesteps, states = sde.generate_random_states(x0=GT, mu=LQ)
 
             # gt_img = util.tensor2img(GT.squeeze())
             # lq_img = util.tensor2img(LQ.squeeze())
@@ -311,8 +311,8 @@ def main():
                     LQ, GT, FS, deg_type = val_data["LQ"], val_data["GT"], val_data["FS"], val_data["type"]
                     # model_ff.feed_data(LQ)
                     # FS = model_ff.test()
-                    # noisy_state = sde.noise_state(FS)
-                    noisy_state = sde.noise_state(LQ)
+                    noisy_state = sde.noise_state(FS)
+                    # noisy_state = sde.noise_state(LQ)
 
                     # valid Predictor
                     if use_daclip_context:

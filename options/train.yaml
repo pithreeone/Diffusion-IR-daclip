@@ -7,7 +7,7 @@ distortion: [motion-blurry,hazy,low-light,noisy,rainy]
 # distortion: [rainy]
 # distortion: [motion-blurry]
 # distortion: [low-light]
-gpu_ids: [0,1]
+gpu_ids: [4, 5]
 
 sde:
   max_sigma: 50
@@ -31,7 +31,7 @@ datasets:
     dataroot: ../Warehouse/Diffusion-IR/datasets/train
 
     use_shuffle: true
-    n_workers: 16  # per GPU
+    n_workers: 4  # per GPU
     batch_size: 16
     patch_size: 256
     use_flip: true
@@ -49,7 +49,7 @@ network_G:
   setting:
     in_nc: 3
     out_nc: 3
-    nf: 128
+    nf: 64
     ch_mult: [1, 2, 4, 8]
     context_dim: 512
     use_daclip_context: false
