@@ -117,6 +117,7 @@ for test_loader in test_loaders:
         model_ff.feed_data(LQ, GT)
         FS = model_ff.test()
         noisy_state = sde.noise_state(LQ)
+        # noisy_state = sde.noise_state(FS)
         if use_daclip_context:
             img4clip = test_data["LQ_clip"].to(device)
             with torch.no_grad(), torch.cuda.amp.autocast():
@@ -154,9 +155,11 @@ for test_loader in test_loaders:
         # remove it if you only want to save output images
         LQ_img_path = os.path.join(dataset_dir, img_name + "_LQ.png")
         GT_img_path = os.path.join(dataset_dir, img_name + "_HQ.png")
+        FS_img_path = os.path.join(dataset_dir, img_name + "_FS.png")
         if opt["save_lqgt"]:
             util.save_img(LQ_, LQ_img_path)
             util.save_img(GT_, GT_img_path)
+            util.save_img(fs_img, FS_img_path)
 
         if need_GT:
             gt_img = GT_ / 255.0

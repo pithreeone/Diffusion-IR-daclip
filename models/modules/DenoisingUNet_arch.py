@@ -22,7 +22,7 @@ class ConditionalUNet(nn.Module):
     # def __init__(self, in_nc, out_nc, nf, ch_mult=[1, 2, 4, 4], 
     #                 context_dim=512, use_degra_context=True, use_image_context=False, upscale=1):
     def __init__(self, in_nc, out_nc, nf, ch_mult=[1, 2, 4, 4], 
-                    context_dim=512, use_daclip_context=True, upscale=1, in_ch_scale=2):
+                    context_dim=512, use_daclip_context=True, upscale=1, in_ch_scale=2, cond_type='concat'):
         super().__init__()
         self.depth = len(ch_mult)
         self.upscale = upscale # not used
@@ -30,6 +30,7 @@ class ConditionalUNet(nn.Module):
         # self.use_image_context = use_image_context
         # self.use_degra_context = use_degra_context
         self.use_image_context = self.use_degra_context = self.use_daclip_context = use_daclip_context
+        self.cond_type = cond_type
 
         num_head_channels = 32
         dim_head = num_head_channels
@@ -69,6 +70,7 @@ class ConditionalUNet(nn.Module):
         # layers
         self.downs = nn.ModuleList([])
         self.ups = nn.ModuleList([])
+        self.cond_downs = nn.ModuleList([])
         ch_mult = [1] + ch_mult
 
         for i in range(self.depth):
@@ -100,6 +102,12 @@ class ConditionalUNet(nn.Module):
                 Upsample(dim_out, dim_in) if i!=0 else default_conv(dim_out, dim_in)
             ]))
 
+            if cond_type == 'cond_module':
+                self.cond_downs.append(nn.ModuleList([
+                    block_class(dim_in=dim_in, dim_out=dim_in, time_emb_dim=time_dim),
+                    Downsample(dim_in, dim_out) if i != (self.depth-1) else default_conv(dim_in, dim_out)
+                ]))
+
         mid_dim = nf * ch_mult[-1]
         num_heads_mid = mid_dim // num_head_channels
         self.mid_block1 = block_class(dim_in=mid_dim, dim_out=mid_dim, time_emb_dim=time_dim)
@@ -125,12 +133,10 @@ class ConditionalUNet(nn.Module):
         if isinstance(time, int) or isinstance(time, float):
             time = torch.tensor([time]).to(xt.device)
         
-        # x = xt - cond
-        # x = torch.cat([x, cond], dim=1)
         x = xt - mu
-        if cond is not None:
-            # x = torch.cat([x, mu, cond-mu], dim=1)
-            x = torch.cat([x, mu, cond], dim=1)
+        if cond is not None and self.cond_type == 'concat':
+            x = torch.cat([x, mu, cond-mu], dim=1)
+            # x = torch.cat([x, mu, cond], dim=1)
             # x = torch.cat([x, cond, mu-cond], dim=1)
             # x = torch.cat([x, mu, mu-cond], dim=1)
         else:
@@ -153,6 +159,7 @@ class ConditionalUNet(nn.Module):
                 image_context = image_context.unsqueeze(1)
 
         h = []
+        cond_embedding = []
         for b1, b2, attn, downsample in self.downs:
             x = b1(x, t)
             h.append(x)
@@ -163,6 +170,14 @@ class ConditionalUNet(nn.Module):
 
             x = downsample(x)
 
+        if self.cond_type == 'cond_module':
+            x_branch = x_.clone()
+            for b, downsample in self.cond_downs:
+                x_branch = b(x_branch, t)
+                cond_embedding.append(x_branch)
+
+                x_branch = downsample(x_branch)
+
         x = self.mid_block1(x, t)
         x = self.mid_attn(x, context=image_context)
         x = self.mid_block2(x, t)
@@ -171,7 +186,10 @@ class ConditionalUNet(nn.Module):
             x = torch.cat([x, h.pop()], dim=1)
             x = b1(x, t)
             
-            x = torch.cat([x, h.pop()], dim=1)
+            if self.cond_type == 'cond_module':
+                x = torch.cat([x, h.pop(), cond_embedding.pop()], dim=1)
+            else:
+                x = torch.cat([x, h.pop()], dim=1)
             x = b2(x, t)
 
             x = attn(x, context=image_context)

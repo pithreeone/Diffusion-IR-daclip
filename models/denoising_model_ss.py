@@ -126,27 +126,27 @@ class DenoisingModelSS(BaseModel):
 
     def feed_data(self, state, LQ, GT=None, FS=None, text_context=None, image_context=None):
         self.state = state.to(self.device)    # noisy_state
-        self.condition = LQ.to(self.device)  # LQ
+        # self.condition = LQ.to(self.device)  # LQ
+        self.LQ = LQ.to(self.device)  # LQ
         if FS is not None:
-            self.first_stage_result = FS.to(self.device) # FS
+            # self.first_stage_result = FS.to(self.device) # FS
+            self.FS = FS.to(self.device) # FS
         if GT is not None:
             self.state_0 = GT.to(self.device)  # GT
         self.text_context = text_context
         self.image_context = image_context
 
     def optimize_parameters(self, step, timesteps, sde=None):
-        # sde.set_mu(self.condition)
-        sde.set_mu(self.first_stage_result)
+        sde.set_mu(self.LQ)
+        # sde.set_mu(self.FS)
 
         self.optimizer.zero_grad()
 
         timesteps = timesteps.to(self.device)
 
         # Get noise and score
-        # noise = sde.noise_fn(self.state, timesteps.squeeze(), text_context=self.text_context, image_context=self.image_context)
-        # noise = sde.noise_fn_cond(self.state, self.first_stage_result, self.condition, timesteps.squeeze(), text_context=self.text_context, image_context=self.image_context)
-        # noise = sde.noise_fn_cond(self.state, self.condition, self.first_stage_result, timesteps.squeeze())
-        noise = sde.noise_fn_cond(self.state, self.first_stage_result, self.condition, timesteps.squeeze())
+        noise = sde.noise_fn_cond(self.state, self.LQ, self.FS, timesteps.squeeze())
+        # noise = sde.noise_fn_cond(self.state, self.FS, self.LQ, timesteps.squeeze())
         score = sde.get_score_from_noise(noise, timesteps)
 
         # Learning the maximum likelihood objective for state x_{t-1}
@@ -168,14 +168,13 @@ class DenoisingModelSS(BaseModel):
             if mode == 'sde':
                 self.output = sde.reverse_sde(self.state, save_states=save_states, text_context=self.text_context, image_context=self.image_context)
             elif mode == 'posterior':
-                # sde.set_mu(self.first_stage_result)
                 sde.set_model(self.ss_model)
-                # sde.set_mu(self.condition)
-                sde.set_mu(self.first_stage_result)
+                sde.set_mu(self.LQ)
+                # sde.set_mu(self.FS)
                 # self.output = sde.reverse_posterior(self.state, save_states=save_states, text_context=self.text_context, image_context=self.image_context)
                 # self.output = sde.reverse_posterior_cond(self.state, cond=self.condition, save_states=save_states, text_context=self.text_context, image_context=self.image_context)
-                # self.output = sde.reverse_posterior_cond(self.state, cond=self.first_stage_result, save_states=save_states)
-                self.output = sde.reverse_posterior_cond(self.state, cond=self.condition, save_states=save_states)
+                self.output = sde.reverse_posterior_cond(self.state, cond=self.FS, save_states=save_states)
+                # self.output = sde.reverse_posterior_cond(self.state, cond=self.LQ, save_states=save_states)
             elif mode == 'posterior_test':
                 # First stage prediction
                 sde.set_model(self.fs_model)
@@ -195,7 +194,8 @@ class DenoisingModelSS(BaseModel):
 
     def get_current_visuals(self, need_GT=True):
         out_dict = OrderedDict()
-        out_dict["Input"] = self.condition.detach()[0].float().cpu()
+        # out_dict["Input"] = self.condition.detach()[0].float().cpu()
+        out_dict["Input"] = self.LQ.detach()[0].float().cpu()
         out_dict["Output"] = self.output.detach()[0].float().cpu()
         if need_GT:
             out_dict["GT"] = self.state_0.detach()[0].float().cpu()

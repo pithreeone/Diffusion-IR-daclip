@@ -3,7 +3,7 @@ suffix: ~  # add suffix to saved images
 model: denoising_ss
 # distortion: [motion-blurry,hazy,jpeg-compressed,low-light,noisy,raindrop,rainy,shadowed,snowy,uncompleted] # uncompleted means inpainting
 distortion: [rainy] # uncompleted means inpainting
-gpu_ids: [0]
+gpu_ids: [4]
 # normalize_to_neg1_1: true
 save_lqgt: false
 
@@ -23,11 +23,11 @@ degradation:
   scale: 4
 
 datasets:
-  # test1:
-  #  name: noisy
-  #  mode: LQGT
-  #  dataroot_GT: test-data/denoising_testsets/CBSD68
-  #  dataroot_LQ: test-data/denoising_testsets/CBSD68_25
+  test1:
+    name: noisy
+    mode: LQGT
+    dataroot_GT: test-data/denoising_testsets/CBSD68
+    dataroot_LQ: test-data/denoising_testsets/CBSD68_25
   # test2:
   #   name: rainy
   #   mode: LQGT
@@ -36,20 +36,20 @@ datasets:
     # dataroot_GT: ../Warehouse/Diffusion-IR/datasets/train/rainy/RainTrainL/GT
     # dataroot_LQ: ../Warehouse/Diffusion-IR/datasets/train/rainy/RainTrainL/LQ
   # test3:
-  #  name: hazy
-  #  mode: LQGT
-  #  dataroot_GT: test-data/SOTS/GT
-  #  dataroot_LQ: test-data/SOTS/GT
-  test4:
-   name: motion-blurry
-   mode: LQGT
-   dataroot_GT: test-data/GoPro/target
-   dataroot_LQ: test-data/GoPro/input
+  #   name: hazy
+  #   mode: LQGT
+  #   dataroot_GT: test-data/SOTS/GT
+  #   dataroot_LQ: test-data/SOTS/GT
+  # test4:
+  #   name: motion-blurry
+  #   mode: LQGT
+  #   dataroot_GT: test-data/GoPro/target
+  #   dataroot_LQ: test-data/GoPro/input
   # test5:
-  #  name: low-light
-  #  mode: LQGT
-  #  dataroot_GT: test-data/LOL/high
-  #  dataroot_LQ: test-data/LOL/low
+  #   name: low-light
+  #   mode: LQGT
+  #   dataroot_GT: test-data/LOL/high
+  #   dataroot_LQ: test-data/LOL/low
 #### network structures
 network_G:
   which_model_G: ConditionalUNet
@@ -62,6 +62,7 @@ network_G:
     use_daclip_context: false
     # use_degra_context: true
     # use_image_context: true
+    # cond_type: concat
 
 #### path
 path:
@@ -69,4 +70,5 @@ path:
   # fs_pretrain_model_G: experiments/universal-ir_251003-154500/models/360000_G.pth
   # ss_pretrain_model_G: experiments/universal-ir_251005-005945/models/480000_G.pth
   ss_pretrain_model_G: experiments/universal-ir_251011-160447/models/400000_G.pth
+  # ss_pretrain_model_G: experiments/universal-ir_251013-141102/models/480000_G.pth
   
