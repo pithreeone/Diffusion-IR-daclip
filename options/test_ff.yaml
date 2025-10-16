@@ -3,7 +3,7 @@ suffix: ~  # add suffix to saved images
 model: ff_model
 # distortion: [motion-blurry,hazy,jpeg-compressed,low-light,noisy,raindrop,rainy,shadowed,snowy,uncompleted] # uncompleted means inpainting
 distortion: ~
-gpu_ids: [4]
+gpu_ids: [3]
 normalize_to_neg1_1: true
 save_lqgt: false
 
@@ -26,38 +26,38 @@ datasets:
   # test1:
   #   name: noisy
   #   mode: LQGT
-  #   #  dataroot_GT: test-data/denoising_testsets/CBSD68
-  #   #  dataroot_LQ: test-data/denoising_testsets/CBSD68_25
-  #   dataroot_GT: ../Warehouse/Diffusion-IR/datasets/train/noisy/GT
-  #   dataroot_LQ: ../Warehouse/Diffusion-IR/datasets/train/noisy/LQ
-  # test2:
-  #   name: rainy
-  #   mode: LQGT
+  #   dataroot_GT: test-data/denoising_testsets/CBSD68
+  #   dataroot_LQ: test-data/denoising_testsets/CBSD68_25
+    # dataroot_GT: ../Warehouse/Diffusion-IR/datasets/train/noisy/GT
+    # dataroot_LQ: ../Warehouse/Diffusion-IR/datasets/train/noisy/LQ
+  test2:
+    name: rainy
+    mode: LQGT
   #   dataroot_GT: test-data/Rain100L/target
   #   dataroot_LQ: test-data/Rain100L/input  
-  # #   dataroot_GT: ../Warehouse/Diffusion-IR/datasets/train/rainy/RainTrainL/GT
-  # #   dataroot_LQ: ../Warehouse/Diffusion-IR/datasets/train/rainy/RainTrainL/LQ
-  # test3:
-  #   name: hazy
-  #   mode: LQGT
+    dataroot_GT: ../Warehouse/Diffusion-IR/datasets/train/rainy/RainTrainL/GT
+    dataroot_LQ: ../Warehouse/Diffusion-IR/datasets/train/rainy/RainTrainL/LQ
+  test3:
+    name: hazy
+    mode: LQGT
   #   dataroot_GT: test-data/SOTS/GT
   #   dataroot_LQ: test-data/SOTS/IN
-  # #  dataroot_GT: ../Warehouse/Diffusion-IR/datasets/train/hazy/GT
-  # #  dataroot_LQ: ../Warehouse/Diffusion-IR/datasets/train/hazy/LQ
-  # test4:
-  #   name: motion-blurry
-  #   mode: LQGT
-  #   dataroot_GT: test-data/GoPro/target
-  #   dataroot_LQ: test-data/GoPro/input
-  # #  dataroot_GT: ../Warehouse/Diffusion-IR/datasets/train/motion-blurry/GT
-  # #  dataroot_LQ: ../Warehouse/Diffusion-IR/datasets/train/motion-blurry/LQ
+    dataroot_GT: ../Warehouse/Diffusion-IR/datasets/train/hazy/GT
+    dataroot_LQ: ../Warehouse/Diffusion-IR/datasets/train/hazy/LQ
+  test4:
+    name: motion-blurry
+    mode: LQGT
+    # dataroot_GT: test-data/GoPro/target
+    # dataroot_LQ: test-data/GoPro/input
+    dataroot_GT: ../Warehouse/Diffusion-IR/datasets/train/motion-blurry/GT
+    dataroot_LQ: ../Warehouse/Diffusion-IR/datasets/train/motion-blurry/LQ
   test5:
     name: low-light
     mode: LQGT
-    dataroot_GT: test-data/LOL/high
-    dataroot_LQ: test-data/LOL/low
-  #  dataroot_GT: ../Warehouse/Diffusion-IR/datasets/train/low-light/GT
-  #  dataroot_LQ: ../Warehouse/Diffusion-IR/datasets/train/low-light/LQ
+  #   dataroot_GT: test-data/LOL/high
+  #   dataroot_LQ: test-data/LOL/low
+    dataroot_GT: ../Warehouse/Diffusion-IR/datasets/train/low-light/GT
+    dataroot_LQ: ../Warehouse/Diffusion-IR/datasets/train/low-light/LQ
 #### network structures
 network_G:
   which_model_G: UNet
@@ -71,6 +71,7 @@ network_G:
     # use_degra_context: true
     # use_image_context: true
     in_ch_scale: 1
+    attn: false
 
 #### path
 path:
@@ -81,5 +82,6 @@ path:
   # pretrain_model_G: experiments/universal-ir_251002-105026/models/200000_G.pth
   # pretrain_model_G: experiments/universal-ir_251003-154500/models/360000_G.pth
   # pretrain_model_G: experiments/universal-ir_251006-165812/models/600000_G.pth
-  pretrain_model_G: experiments/feedforward-ir_251009-182704/models/240000_G.pth
+  # pretrain_model_G: experiments/feedforward-ir_251009-182704/models/240000_G.pth
+  pretrain_model_G: experiments/feedforward-ir_251015-195349/models/580000_G.pth
   # daclip: pretrained/daclip_ViT-B-32.pt

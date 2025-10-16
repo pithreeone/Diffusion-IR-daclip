@@ -6,7 +6,7 @@ model: denoising_ss
 distortion: [motion-blurry,hazy,low-light,noisy,rainy]
 # distortion: [rainy]
 # distortion: [motion-blurry]
-gpu_ids: [4, 5]
+gpu_ids: [4,5]
 
 sde:
   max_sigma: 50
@@ -63,6 +63,7 @@ network_G:
     use_daclip_context: false
     # use_degra_context: true
     # use_image_context: true
+    cond_type: cond_module
 
 #### path
 path:

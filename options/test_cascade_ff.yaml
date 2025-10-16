@@ -23,11 +23,11 @@ degradation:
   scale: 4
 
 datasets:
-  test1:
-    name: noisy
-    mode: LQGT
-    dataroot_GT: test-data/denoising_testsets/CBSD68
-    dataroot_LQ: test-data/denoising_testsets/CBSD68_25
+  # test1:
+  #   name: noisy
+  #   mode: LQGT
+  #   dataroot_GT: test-data/denoising_testsets/CBSD68
+  #   dataroot_LQ: test-data/denoising_testsets/CBSD68_25
   # test2:
   #   name: rainy
   #   mode: LQGT
@@ -45,11 +45,11 @@ datasets:
   #   mode: LQGT
   #   dataroot_GT: test-data/GoPro/target
   #   dataroot_LQ: test-data/GoPro/input
-  # test5:
-  #   name: low-light
-  #   mode: LQGT
-  #   dataroot_GT: test-data/LOL/high
-  #   dataroot_LQ: test-data/LOL/low
+  test5:
+    name: low-light
+    mode: LQGT
+    dataroot_GT: test-data/LOL/high
+    dataroot_LQ: test-data/LOL/low
 #### network structures
 network_G:
   which_model_G: ConditionalUNet
@@ -62,7 +62,7 @@ network_G:
     use_daclip_context: false
     # use_degra_context: true
     # use_image_context: true
-    # cond_type: concat
+    cond_type: concat
 
 #### path
 path:

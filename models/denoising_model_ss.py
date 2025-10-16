@@ -37,7 +37,10 @@ class DenoisingModelSS(BaseModel):
         self.fs_model.eval()
         for param in self.fs_model.parameters():
             param.requires_grad = False
-        self.ss_model = networks.define_G(opt, in_ch_scale=3).to(self.device)
+        if opt["network_G"]["setting"]["cond_type"] == 'concat':
+            self.ss_model = networks.define_G(opt, in_ch_scale=3).to(self.device)
+        elif opt["network_G"]["setting"]["cond_type"] == 'cond_module':
+            self.ss_model = networks.define_G(opt, in_ch_scale=2).to(self.device)
         # self.ss_model = networks.define_G(opt, in_ch_scale=2).to(self.device)
         if opt["dist"]:
             self.ss_model = DistributedDataParallel(

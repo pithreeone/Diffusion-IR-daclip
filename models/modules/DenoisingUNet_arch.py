@@ -13,7 +13,8 @@ from .module_util import (
     default_conv,
     ResBlock, Upsampler,
     LinearAttention, Attention,
-    PreNorm, Residual)
+    PreNorm, Residual,
+    Identity)
 
 from .attention import SpatialTransformer
 
@@ -39,6 +40,7 @@ class ConditionalUNet(nn.Module):
 
         # self.init_conv = default_conv(in_nc*2, nf, 7)
         self.init_conv = default_conv(in_nc*in_ch_scale, nf, 7)
+        self.init_conv_cond = default_conv(in_nc, nf, 7)
         
         # time embeddings
         time_dim = nf * 4
@@ -97,7 +99,7 @@ class ConditionalUNet(nn.Module):
 
             self.ups.insert(0, nn.ModuleList([
                 block_class(dim_in=dim_out + dim_in, dim_out=dim_out, time_emb_dim=time_dim),
-                block_class(dim_in=dim_out + dim_in, dim_out=dim_out, time_emb_dim=time_dim),
+                block_class(dim_in=dim_out + dim_in*2, dim_out=dim_out, time_emb_dim=time_dim),
                 Residual(PreNorm(dim_out, att_up)),
                 Upsample(dim_out, dim_in) if i!=0 else default_conv(dim_out, dim_in)
             ]))
@@ -105,7 +107,7 @@ class ConditionalUNet(nn.Module):
             if cond_type == 'cond_module':
                 self.cond_downs.append(nn.ModuleList([
                     block_class(dim_in=dim_in, dim_out=dim_in, time_emb_dim=time_dim),
-                    Downsample(dim_in, dim_out) if i != (self.depth-1) else default_conv(dim_in, dim_out)
+                    Downsample(dim_in, dim_out) if i != (self.depth-1) else Identity()
                 ]))
 
         mid_dim = nf * ch_mult[-1]
@@ -132,7 +134,7 @@ class ConditionalUNet(nn.Module):
 
         if isinstance(time, int) or isinstance(time, float):
             time = torch.tensor([time]).to(xt.device)
-        
+
         x = xt - mu
         if cond is not None and self.cond_type == 'concat':
             x = torch.cat([x, mu, cond-mu], dim=1)
@@ -171,17 +173,19 @@ class ConditionalUNet(nn.Module):
             x = downsample(x)
 
         if self.cond_type == 'cond_module':
-            x_branch = x_.clone()
+            cond = cond - mu
+            cond = self.check_image_size(cond, H, W)
+            
+            cond = self.init_conv_cond(cond)
             for b, downsample in self.cond_downs:
-                x_branch = b(x_branch, t)
-                cond_embedding.append(x_branch)
+                cond = b(cond, t)
+                cond_embedding.append(cond)
 
-                x_branch = downsample(x_branch)
+                cond = downsample(cond)
 
         x = self.mid_block1(x, t)
         x = self.mid_attn(x, context=image_context)
         x = self.mid_block2(x, t)
-
         for b1, b2, attn, upsample in self.ups:
             x = torch.cat([x, h.pop()], dim=1)
             x = b1(x, t)
