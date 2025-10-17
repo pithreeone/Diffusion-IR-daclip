@@ -4,7 +4,7 @@ use_tb_logger: true
 model: ff_model
 # distortion: [motion-blurry,hazy,jpeg-compressed,low-light,noisy,raindrop,rainy,shadowed,snowy,uncompleted]
 distortion: [motion-blurry,hazy,low-light,noisy,rainy]
-gpu_ids: [4,5]
+gpu_ids: [1]
 
 sde:
   max_sigma: 50
@@ -46,7 +46,7 @@ network_G:
   setting:
     in_nc: 3
     out_nc: 3
-    nf: 64
+    nf: 128
     ch_mult: [1, 2, 4, 4]
     context_dim: 512
     use_daclip_context: false

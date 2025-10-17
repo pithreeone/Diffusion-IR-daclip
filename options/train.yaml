@@ -4,9 +4,6 @@ use_tb_logger: true
 model: denoising
 # distortion: [motion-blurry,hazy,jpeg-compressed,low-light,noisy,raindrop,rainy,shadowed,snowy,uncompleted]
 distortion: [motion-blurry,hazy,low-light,noisy,rainy]
-# distortion: [rainy]
-# distortion: [motion-blurry]
-# distortion: [low-light]
 gpu_ids: [4, 5]
 
 sde:
@@ -55,6 +52,7 @@ network_G:
     use_daclip_context: false
     # use_degra_context: true
     # use_image_context: true
+    attn: false
 
 #### path
 path:

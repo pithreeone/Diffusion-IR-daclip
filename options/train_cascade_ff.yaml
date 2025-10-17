@@ -28,7 +28,7 @@ datasets:
     name: Train_Dataset
     mode: MDFS
     dataroot: ../Warehouse/Diffusion-IR/datasets/train
-    first_stage_result: results/fs_result_ff_train
+    first_stage_result: results/fs_result_ff_251015-195349_train
     # first_stage_result: results/fs_result_rainTrainL_-1_1/prediction
     # first_stage_result: results/fs_result_rainTrainL_-1_1_all
 
@@ -45,7 +45,7 @@ datasets:
     mode: MDFS
     n_sample: 20
     dataroot: ../Warehouse/Diffusion-IR/datasets/daclip-val
-    first_stage_result: results/fs_result_ff_test
+    first_stage_result: results/fs_result_ff_251015-195349_test
     # dataroot: ../Warehouse/Diffusion-IR/datasets/train
     # first_stage_result: results/fs_result_rainTestL_-1_1/prediction
     # first_stage_result: results/fs_result_rainTestL_-1_1_all
@@ -64,6 +64,7 @@ network_G:
     # use_degra_context: true
     # use_image_context: true
     cond_type: cond_module
+    attn: true
 
 #### path
 path:
