@@ -35,6 +35,7 @@ network_G:
     # use_degra_context: true
     # use_image_context: true
     in_ch_scale: 1
+    attn: false
 
 #### path
 path:
@@ -45,5 +46,6 @@ path:
   # pretrain_model_G: experiments/universal-ir_251002-105026/models/200000_G.pth
   # pretrain_model_G: experiments/universal-ir_251003-154500/models/360000_G.pth
   # pretrain_model_G: experiments/universal-ir_251006-165812/models/600000_G.pth
-  pretrain_model_G: experiments/feedforward-ir_251009-182704/models/240000_G.pth
+  # pretrain_model_G: experiments/feedforward-ir_251009-182704/models/240000_G.pth
+  pretrain_model_G: experiments/feedforward-ir_251015-195349/models/580000_G.pth
   # daclip: pretrained/daclip_ViT-B-32.pt

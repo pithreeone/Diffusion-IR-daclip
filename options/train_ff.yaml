@@ -4,7 +4,7 @@ use_tb_logger: true
 model: ff_model
 # distortion: [motion-blurry,hazy,jpeg-compressed,low-light,noisy,raindrop,rainy,shadowed,snowy,uncompleted]
 distortion: [motion-blurry,hazy,low-light,noisy,rainy]
-gpu_ids: [1]
+gpu_ids: [0,1]
 
 sde:
   max_sigma: 50
@@ -46,7 +46,7 @@ network_G:
   setting:
     in_nc: 3
     out_nc: 3
-    nf: 128
+    nf: 64
     ch_mult: [1, 2, 4, 4]
     context_dim: 512
     use_daclip_context: false
@@ -70,7 +70,7 @@ train:
   lr_scheme: TrueCosineAnnealingLR # MultiStepLR
   beta1: 0.5
   beta2: 0.9
-  niter: 700000
+  niter: 1000000
   warmup_iter: -1  # no warm up
   lr_steps: [200000, 400000, 600000]
   lr_gamma: 0.5

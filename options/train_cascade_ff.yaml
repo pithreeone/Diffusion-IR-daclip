@@ -6,7 +6,7 @@ model: denoising_ss
 distortion: [motion-blurry,hazy,low-light,noisy,rainy]
 # distortion: [rainy]
 # distortion: [motion-blurry]
-gpu_ids: [4,5]
+gpu_ids: [4]
 
 sde:
   max_sigma: 50
@@ -43,7 +43,7 @@ datasets:
   val:
     name: Val_Dataset
     mode: MDFS
-    n_sample: 20
+    n_sample: 100
     dataroot: ../Warehouse/Diffusion-IR/datasets/daclip-val
     first_stage_result: results/fs_result_ff_251015-195349_test
     # dataroot: ../Warehouse/Diffusion-IR/datasets/train
@@ -63,7 +63,7 @@ network_G:
     use_daclip_context: false
     # use_degra_context: true
     # use_image_context: true
-    cond_type: cond_module
+    cond_type: concat                      # [concat, cond_module]
     attn: true
 
 #### path

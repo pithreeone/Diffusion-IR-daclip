@@ -18,8 +18,9 @@ import open_clip
 import utils as util
 from data import create_dataloader, create_dataset
 from data.util import bgr2ycbcr
-
+from utils.post_process import color_correction
 #### options
+
 parser = argparse.ArgumentParser()
 parser.add_argument("--opt", type=str, required=True, help="Path to options YMAL file.")
 opt = option.parse(parser.parse_args().opt, is_train=False)
@@ -83,8 +84,11 @@ sde = util.IRSDE(max_sigma=opt["sde"]["max_sigma"], T=opt["sde"]["T"], schedule=
 # sde.set_model(model.fs_model)
 lpips_fn = lpips.LPIPS(net='alex').to(device)
 
-scale = opt['degradation']['scale']
+# scale = opt['degradation']['scale']
 sampling_mode = opt["sde"]["sampling_mode"]
+
+#### Set seed
+util.seed_everything()
 
 for test_loader in test_loaders:
     test_set_name = test_loader.dataset.opt["name"]  # path opt['']
@@ -116,17 +120,10 @@ for test_loader in test_loaders:
         LQ, GT = test_data["LQ"], test_data["GT"]
         model_ff.feed_data(LQ, GT)
         FS = model_ff.test()
-        noisy_state = sde.noise_state(LQ)
-        # noisy_state = sde.noise_state(FS)
-        if use_daclip_context:
-            img4clip = test_data["LQ_clip"].to(device)
-            with torch.no_grad(), torch.cuda.amp.autocast():
-                image_context, degra_context = clip_model.encode_image(img4clip, control=True)
-                image_context = image_context.float()
-                degra_context = degra_context.float()
-            model.feed_data(noisy_state, LQ, GT, text_context=degra_context, image_context=image_context)
-        else: 
-            model.feed_data(noisy_state, LQ, GT=GT, FS=FS)
+        # noisy_state = sde.noise_state(LQ)
+        noisy_state = sde.noise_state(FS)
+
+        model.feed_data(noisy_state, LQ, GT=GT, FS=FS)
 
         tic = time.time()
         model.test(sde)
@@ -138,6 +135,9 @@ for test_loader in test_loaders:
         # output = util.tensor2img(SR_img.squeeze())  # uint8
         # LQ_ = util.tensor2img(visuals["Input"].squeeze())  # uint8
         # GT_ = util.tensor2img(visuals["GT"].squeeze())  # uint8
+
+        if opt["color_correction"]:
+            SR_img = color_correction(SR_img.unsqueeze(0), FS.cpu())[0]
 
         output = util.tensor2img((SR_img.squeeze()+1.0)/2.0)  # uint8
         LQ_ = util.tensor2img((visuals["Input"].squeeze()+1.0)/2.0)  # uint8
@@ -166,27 +166,12 @@ for test_loader in test_loaders:
             sr_img = output / 255.0
             fs_img = fs_img / 255.0
 
-            crop_border = opt["crop_border"] if opt["crop_border"] else scale
-            if crop_border == 0:
-                cropped_sr_img = sr_img
-                cropped_gt_img = gt_img
-            else:
-                cropped_sr_img = sr_img[
-                    crop_border:-crop_border, crop_border:-crop_border
-                ]
-                cropped_gt_img = gt_img[
-                    crop_border:-crop_border, crop_border:-crop_border
-                ]
-                cropped_fs_img = fs_img[
-                    crop_border:-crop_border, crop_border:-crop_border
-                ]
-
-            psnr = util.calculate_psnr(cropped_sr_img * 255, cropped_gt_img * 255)
-            ssim = util.calculate_ssim(cropped_sr_img * 255, cropped_gt_img * 255)
+            psnr = util.calculate_psnr(sr_img * 255, gt_img * 255)
+            ssim = util.calculate_ssim(sr_img * 255, gt_img * 255)
             lp_score = lpips_fn(
                 # GT.to(device) * 2 - 1, SR_img.to(device) * 2 - 1).squeeze().item()
                 GT.to(device), SR_img.to(device)).squeeze().item()
-            psnr_fs = util.calculate_psnr(cropped_fs_img * 255, cropped_gt_img * 255)
+            psnr_fs = util.calculate_psnr(fs_img * 255, gt_img * 255)
 
             test_results["psnr"].append(psnr)
             test_results["ssim"].append(ssim)
@@ -197,16 +182,10 @@ for test_loader in test_loaders:
                 if gt_img.shape[2] == 3:  # RGB image
                     sr_img_y = bgr2ycbcr(sr_img, only_y=True)
                     gt_img_y = bgr2ycbcr(gt_img, only_y=True)
-                    if crop_border == 0:
-                        cropped_sr_img_y = sr_img_y
-                        cropped_gt_img_y = gt_img_y
-                    else:
-                        cropped_sr_img_y = sr_img_y[
-                            crop_border:-crop_border, crop_border:-crop_border
-                        ]
-                        cropped_gt_img_y = gt_img_y[
-                            crop_border:-crop_border, crop_border:-crop_border
-                        ]
+                    # if crop_border == 0:
+                    cropped_sr_img_y = sr_img_y
+                    cropped_gt_img_y = gt_img_y
+
                     psnr_y = util.calculate_psnr(
                         cropped_sr_img_y * 255, cropped_gt_img_y * 255
                     )

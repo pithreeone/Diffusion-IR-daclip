@@ -256,8 +256,9 @@ def main():
             # output = util.tensor2img((FS+1.0)/2.0)  # uint8
             # util.save_img(output, f'image/{current_step}.png')
 
-            # timesteps, states = sde.generate_random_states(x0=GT, mu=FS)
-            timesteps, states = sde.generate_random_states(x0=GT, mu=LQ)
+            ### set terminal-state as FS
+            timesteps, states = sde.generate_random_states(x0=GT, mu=FS)
+            # timesteps, states = sde.generate_random_states(x0=GT, mu=LQ)
 
             # gt_img = util.tensor2img(GT.squeeze())
             # lq_img = util.tensor2img(LQ.squeeze())
@@ -269,17 +270,8 @@ def main():
             # util.save_img(fs_img, f'image/{current_step}_{deg_type[0]}_FS.png')
             # util.save_img(states_img, f'image/{current_step}_{deg_type[0]}_states.png')
 
-            if use_daclip_context:
-                deg_token = tokenizer(deg_type).to(device)
-                img4clip = train_data["LQ_clip"].to(device)
-                with torch.no_grad(), torch.cuda.amp.autocast():
-                    image_context, degra_context = clip_model.encode_image(img4clip, control=True)
-                    image_context = image_context.float()
-                    degra_context = degra_context.float()
-                model.feed_data(states, LQ, GT, text_context=degra_context, image_context=image_context) # xt, mu, x0
-            else:
-                # model.feed_data(states, LQ, GT) # xt, mu, x0
-                model.feed_data(states, LQ, GT=GT, FS=FS) # xt, mu, x0
+            # model.feed_data(states, LQ, GT) # xt, mu, x0
+            model.feed_data(states, LQ, GT=GT, FS=FS) # xt, mu, x0
 
             model.optimize_parameters(current_step, timesteps, sde)
             model.update_learning_rate(
@@ -311,21 +303,13 @@ def main():
                     LQ, GT, FS, deg_type = val_data["LQ"], val_data["GT"], val_data["FS"], val_data["type"]
                     # model_ff.feed_data(LQ)
                     # FS = model_ff.test()
-                    # noisy_state = sde.noise_state(FS)
-                    noisy_state = sde.noise_state(LQ)
+
+                    ### set terminal-state as FS
+                    noisy_state = sde.noise_state(FS)
+                    # noisy_state = sde.noise_state(LQ)
 
                     # valid Predictor
-                    if use_daclip_context:
-                        deg_token = tokenizer(deg_type).to(device)
-                        img4clip = val_data["LQ_clip"].to(device)
-                        with torch.no_grad(), torch.cuda.amp.autocast():
-                            image_context, degra_context = clip_model.encode_image(img4clip, control=True)
-                            image_context = image_context.float()
-                            degra_context = degra_context.float()
-                        model.feed_data(noisy_state, LQ, GT, text_context=degra_context, image_context=image_context)
-                    else:
-                        # model.feed_data(noisy_state, LQ, GT)
-                        model.feed_data(noisy_state, LQ, GT=GT, FS=FS) # xt, mu, x0
+                    model.feed_data(noisy_state, LQ, GT=GT, FS=FS) # xt, mu, x0
 
                     model.test(sde)
                     visuals = model.get_current_visuals()

@@ -8,7 +8,7 @@ degradation_types = ["motion-blurry","hazy","low-light","noisy","rainy"]
 # degradation_types = ["motion-blurry","hazy","low-light","rainy"]
 
 dataset_train_folder = "../Warehouse/Diffusion-IR/datasets/train/"
-fs_result_train_folder = "results/fs_result_ff_train"
+fs_result_train_folder = "results/fs_result_ff_251015-195349_train"
 
 residuals = []
 labels = []
@@ -38,6 +38,7 @@ for deg_type in degradation_types:
         lq_img = cv2.imread(lq_path)
         fs_img = cv2.imread(fs_path)
 
+
         # Ensure images are same size and convert to float32
         if lq_img is None or fs_img is None or lq_img.shape != fs_img.shape:
             continue
@@ -46,6 +47,8 @@ for deg_type in degradation_types:
 
         # Compute residual (FS - LQ)
         residual = fs_img - lq_img
+        # residual_vis = (residual - residual.min()) / (residual.max() - residual.min() + 1e-8)
+        # cv2.imwrite(f"test_{deg_type}.png", (residual_vis * 255).astype(np.uint8))
         # residual = fs_img
 
         # Optionally: resize smaller to reduce dimension
@@ -58,14 +61,14 @@ for deg_type in degradation_types:
         labels.append(deg_type)
 
         count += 1
-
+    print(count)
 # Convert to numpy
 residuals = np.array(residuals)
 
 print(f"Total samples: {len(residuals)}, feature dimension: {residuals.shape[1]}")
 
 # Apply t-SNE
-tsne = TSNE(n_components=2, random_state=42, perplexity=30)
+tsne = TSNE(n_components=2, random_state=42, perplexity=10)
 residuals_2d = tsne.fit_transform(residuals)
 
 # Map colors per degradation type
