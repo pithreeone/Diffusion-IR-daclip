@@ -24,16 +24,16 @@ degradation:
   # scale: 1
 
 datasets:
-  # test1:
-  #   name: noisy
-  #   mode: LQGT
-  #   dataroot_GT: test-data/denoising_testsets/CBSD68
-  #   dataroot_LQ: test-data/denoising_testsets/CBSD68_25
-  test2:
-    name: rainy
+  test1:
+    name: noisy
     mode: LQGT
-    dataroot_GT: test-data/Rain100L/target
-    dataroot_LQ: test-data/Rain100L/input
+    dataroot_GT: test-data/denoising_testsets/CBSD68
+    dataroot_LQ: test-data/denoising_testsets/CBSD68_25
+  # test2:
+  #   name: rainy
+  #   mode: LQGT
+  #   dataroot_GT: test-data/Rain100L/target
+  #   dataroot_LQ: test-data/Rain100L/input
     # dataroot_GT: ../Warehouse/Diffusion-IR/datasets/train/rainy/RainTrainL/GT
     # dataroot_LQ: ../Warehouse/Diffusion-IR/datasets/train/rainy/RainTrainL/LQ
   # test3:

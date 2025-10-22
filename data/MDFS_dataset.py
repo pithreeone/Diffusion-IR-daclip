@@ -31,12 +31,11 @@ class MDFSDataset(data.Dataset):
     Also read the prediction from first-stage diffusion model.
     """
 
-    def __init__(self, opt, mode='train'):
+    def __init__(self, opt):
         super().__init__()
         self.opt = opt
         self.size = opt["patch_size"]
         self.deg_types = opt["distortion"]
-
         self.distortion = {}
         for deg_type in opt["distortion"]:
             if (opt['name'] == 'Train_Dataset') and deg_type == "rainy":
@@ -76,7 +75,10 @@ class MDFSDataset(data.Dataset):
 
             root = opt["first_stage_result"]
 
-            FS_result_paths = util.get_image_paths(opt["data_type"], os.path.join(root, deg_type))
+            if deg_type == 'noisy_50':
+                FS_result_paths = util.get_image_paths(opt["data_type"], os.path.join(root, 'noisy'))
+            else:
+                FS_result_paths = util.get_image_paths(opt["data_type"], os.path.join(root, deg_type))
             # # list all subfolders
             # subfolders = [os.path.join(root, d) for d in os.listdir((root))]
 

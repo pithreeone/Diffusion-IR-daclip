@@ -8,7 +8,8 @@ degradation_types = ["motion-blurry","hazy","low-light","noisy","rainy"]
 # degradation_types = ["motion-blurry","hazy","low-light","rainy"]
 
 dataset_train_folder = "../Warehouse/Diffusion-IR/datasets/train/"
-fs_result_train_folder = "results/fs_result_ff_251015-195349_train"
+# fs_result_train_folder = "results/fs_result_ff_251015-195349_train"
+fs_result_train_folder = "results/fs_result_ff_mtk_large_train"
 
 residuals = []
 labels = []
@@ -68,7 +69,7 @@ residuals = np.array(residuals)
 print(f"Total samples: {len(residuals)}, feature dimension: {residuals.shape[1]}")
 
 # Apply t-SNE
-tsne = TSNE(n_components=2, random_state=42, perplexity=10)
+tsne = TSNE(n_components=2, random_state=42, perplexity=1000)
 residuals_2d = tsne.fit_transform(residuals)
 
 # Map colors per degradation type

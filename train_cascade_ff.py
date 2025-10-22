@@ -28,7 +28,7 @@ from data.build_testsets import get_testsets
 from data.data_sampler import DistIterSampler
 
 from data.util import bgr2ycbcr
-
+from datetime import timedelta
 # torch.autograd.set_detect_anomaly(True)
 
 def init_dist(backend="nccl", **kwargs):
@@ -42,7 +42,7 @@ def init_dist(backend="nccl", **kwargs):
     num_gpus = torch.cuda.device_count()  # Returns the number of GPUs available
     torch.cuda.set_device(rank % num_gpus)
     dist.init_process_group(
-        backend=backend, **kwargs
+        backend=backend, timeout=timedelta(seconds=3600), **kwargs
     )  # Initializes the default distributed process group
 
 
@@ -62,8 +62,7 @@ def main():
     # convert to NoneDict, which returns None for missing keys
     opt = option.dict_to_nonedict(opt)
     opt_ff = option.dict_to_nonedict(opt_ff)
-
-    # opt_ff["gpu_ids"] = opt["gpu_ids"]
+    opt_ff["gpu_ids"] = opt["gpu_ids"]
 
     # choose small opt for SFTMD test, fill path of pre-trained model_F
     #### set random seed
@@ -88,8 +87,6 @@ def main():
 
     torch.backends.cudnn.benchmark = True
     # torch.backends.cudnn.deterministic = True
-
-    ###### Predictor&Corrector train ######
 
     #### loading resume state if exists
     if opt["path"].get("resume_state", None):
@@ -196,17 +193,9 @@ def main():
     assert val_loader is not None
 
     #### create model
-    model = create_model(opt)
+    model = create_model(opt, opt_ff=opt_ff)
     # model_ff = create_model(opt_ff)
     device = model.device
-
-    # clip_model, _preprocess = clip.load("ViT-B/32", device=device)
-    if opt['path']['daclip'] is not None:
-        clip_model, preprocess = open_clip.create_model_from_pretrained('daclip_ViT-B-32', pretrained=opt['path']['daclip'])
-    else:
-        clip_model, _, preprocess = open_clip.create_model_and_transforms('ViT-B-32', pretrained='laion2b_s34b_b79k')
-    tokenizer = open_clip.get_tokenizer('ViT-B-32')
-    clip_model = clip_model.to(device)
 
     #### resume training
     if resume_state:
@@ -249,29 +238,35 @@ def main():
             if current_step > total_iters:
                 break
 
-            LQ, GT, FS, deg_type = train_data["LQ"], train_data["GT"], train_data["FS"], train_data["type"]
+            if "FS" in train_data:
+                LQ, GT, FS, deg_type = train_data["LQ"], train_data["GT"], train_data["FS"], train_data["type"]
+                timesteps, states = sde.generate_random_states(x0=GT, mu=LQ)
+                model.feed_data(states, LQ, GT=GT, FS=FS) # xt, mu, x0
+            else:
+                LQ, GT, deg_type = train_data["LQ"], train_data["GT"], train_data["type"]
+                timesteps, states = sde.generate_random_states(x0=GT, mu=LQ)
+                # model.feed_data(states, LQ, GT=GT) # xt, mu, x0
+                model.feed_data(states, LQ, GT=GT) # xt, mu, x0
+
             # model_ff.feed_data(LQ)
             # FS = model_ff.test()
-
             # output = util.tensor2img((FS+1.0)/2.0)  # uint8
             # util.save_img(output, f'image/{current_step}.png')
 
             ### set terminal-state as FS
-            timesteps, states = sde.generate_random_states(x0=GT, mu=FS)
+            # timesteps, states = sde.generate_random_states(x0=GT, mu=FS)
             # timesteps, states = sde.generate_random_states(x0=GT, mu=LQ)
+            # model.feed_data(states, LQ, GT) # xt, mu, x0
+            # model.feed_data(states, LQ, GT=GT, FS=FS) # xt, mu, x0
 
             # gt_img = util.tensor2img(GT.squeeze())
             # lq_img = util.tensor2img(LQ.squeeze())
             # fs_img = util.tensor2img(FS.squeeze())
             # states_img = util.tensor2img(states.squeeze())
-
             # util.save_img(gt_img, f'image/{current_step}_{deg_type[0]}_GT.png')
             # util.save_img(lq_img, f'image/{current_step}_{deg_type[0]}_LQ.png')
             # util.save_img(fs_img, f'image/{current_step}_{deg_type[0]}_FS.png')
             # util.save_img(states_img, f'image/{current_step}_{deg_type[0]}_states.png')
-
-            # model.feed_data(states, LQ, GT) # xt, mu, x0
-            model.feed_data(states, LQ, GT=GT, FS=FS) # xt, mu, x0
 
             model.optimize_parameters(current_step, timesteps, sde)
             model.update_learning_rate(
@@ -300,24 +295,33 @@ def main():
                 idx = 0
                 for _, val_data in enumerate(val_loader):
 
-                    LQ, GT, FS, deg_type = val_data["LQ"], val_data["GT"], val_data["FS"], val_data["type"]
+                    # LQ, GT, FS, deg_type = val_data["LQ"], val_data["GT"], val_data["FS"], val_data["type"]
+                    if "FS" in val_data:
+                        LQ, GT, FS, deg_type = val_data["LQ"], val_data["GT"], val_data["FS"], val_data["type"]
+                        noisy_state = sde.noise_state(LQ)
+                        model.feed_data(noisy_state, LQ, GT=GT, FS=FS) # xt, mu, x0
+                    else:
+                        LQ, GT, deg_type = val_data["LQ"], val_data["GT"], val_data["type"]
+                        noisy_state = sde.noise_state(LQ)
+                        # model.feed_data(noisy_state, LQ, GT=GT) # xt, mu, x0
+                        model.feed_data(noisy_state, LQ, GT=GT) # xt, mu, x0
+                    
                     # model_ff.feed_data(LQ)
                     # FS = model_ff.test()
 
                     ### set terminal-state as FS
-                    noisy_state = sde.noise_state(FS)
+                    # noisy_state = sde.noise_state(FS)
                     # noisy_state = sde.noise_state(LQ)
 
-                    # valid Predictor
-                    model.feed_data(noisy_state, LQ, GT=GT, FS=FS) # xt, mu, x0
+                    # model.feed_data(noisy_state, LQ, GT=GT, FS=FS) # xt, mu, x0
 
-                    model.test(sde)
+                    model.test(sde, mode=opt['sde']['sampling_mode'])
                     visuals = model.get_current_visuals()
 
                     output = util.tensor2img((visuals["Output"].squeeze()+1.0)/2.0)  # uint8
                     gt_img = util.tensor2img((GT.squeeze()+1.0)/2.0)  # uint8
                     lq_img = util.tensor2img((LQ.squeeze()+1.0)/2.0)
-                    fs_img = util.tensor2img((FS.squeeze()+1.0)/2.0)
+                    fs_img = util.tensor2img((model.FS.squeeze()+1.0)/2.0)
 
                     util.save_img(output, f'image/{idx}_{deg_type[0]}_SR.png')
                     util.save_img(gt_img, f'image/{idx}_{deg_type[0]}_GT.png')
@@ -328,9 +332,6 @@ def main():
                     avg_psnr += util.calculate_psnr(output, gt_img)
                     avg_psnr_fs += util.calculate_psnr(fs_img, gt_img)
                     idx += 1
-
-                    if idx > 99:
-                        break
 
                 avg_psnr = avg_psnr / idx
                 avg_psnr_fs = avg_psnr_fs / idx

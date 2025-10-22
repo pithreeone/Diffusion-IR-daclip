@@ -23,7 +23,7 @@ logger = logging.getLogger("base")
 
 
 class DenoisingModelSS(BaseModel):
-    def __init__(self, opt):
+    def __init__(self, opt, opt_ff=None):
         super(DenoisingModelSS, self).__init__(opt)
 
         if opt["dist"]:
@@ -33,10 +33,16 @@ class DenoisingModelSS(BaseModel):
         train_opt = opt["train"]
 
         # define network and load pretrained models
-        self.fs_model = networks.define_G(opt, in_ch_scale=2).to(self.device)
-        self.fs_model.eval()
-        for param in self.fs_model.parameters():
-            param.requires_grad = False
+        # if self.rank != -1:
+        #     self.device = torch.device(f"cuda:{self.rank}")
+        if opt_ff is not None:
+            self.opt_ff = opt_ff
+            self.fs_model = networks.define_G(opt_ff).to(self.device)
+            # self.fs_model.eval()
+
+            # for param in self.fs_model.parameters():
+            #     param.requires_grad = False
+
         if opt["network_G"]["setting"]["cond_type"] == 'concat':
             self.ss_model = networks.define_G(opt, in_ch_scale=3).to(self.device)
         elif opt["network_G"]["setting"]["cond_type"] == 'cond_module':
@@ -46,6 +52,9 @@ class DenoisingModelSS(BaseModel):
             self.ss_model = DistributedDataParallel(
                 self.ss_model, device_ids=[torch.cuda.current_device()]
             )
+            # self.fs_model = DistributedDataParallel(
+            #     self.fs_model, device_ids=[torch.cuda.current_device()]
+            # )
         else:
             self.ss_model = DataParallel(self.ss_model)
         # print network
@@ -59,17 +68,26 @@ class DenoisingModelSS(BaseModel):
             is_weighted = opt['train']['is_weighted']
             loss_type = opt['train']['loss_type']
             self.loss_fn = MatchingLoss(loss_type, is_weighted).to(self.device)
-            self.weight = opt['train']['weight']
+            self.diff_weight = opt['train']['diffusion_weight']
+            self.fid_weight = opt['train']['fidelity_weight']
 
             # optimizers
             wd_G = train_opt["weight_decay_G"] if train_opt["weight_decay_G"] else 0
             optim_params = []
+            fs_optim_params = []
             for (
                 k,
                 v,
             ) in self.ss_model.named_parameters():  # can optimize for a part of the model
                 if v.requires_grad:
                     optim_params.append(v)
+                else:
+                    if self.rank <= 0:
+                        logger.warning("Params [{:s}] will not optimize.".format(k))
+
+            for (k, v) in self.fs_model.named_parameters():  # can optimize for a part of the model
+                if v.requires_grad:
+                    fs_optim_params.append(v)
                 else:
                     if self.rank <= 0:
                         logger.warning("Params [{:s}] will not optimize.".format(k))
@@ -81,12 +99,24 @@ class DenoisingModelSS(BaseModel):
                     weight_decay=wd_G,
                     betas=(train_opt["beta1"], train_opt["beta2"]),
                 )
+                self.optimizer_fs = torch.optim.Adam(
+                    fs_optim_params,
+                    lr=train_opt["lr_FS"],
+                    weight_decay=wd_G,
+                    betas=(train_opt["beta1_FS"], train_opt["beta2_FS"]),
+                )
             elif train_opt['optimizer'] == 'AdamW':
                 self.optimizer = torch.optim.AdamW(
                     optim_params,
                     lr=train_opt["lr_G"],
                     weight_decay=wd_G,
                     betas=(train_opt["beta1"], train_opt["beta2"]),
+                )
+                self.optimizer_fs = torch.optim.Adam(
+                    fs_optim_params,
+                    lr=train_opt["lr_FS"],
+                    weight_decay=wd_G,
+                    betas=(train_opt["beta1_FS"], train_opt["beta2_FS"]),
                 )
             elif train_opt['optimizer'] == 'Lion':
                 self.optimizer = Lion(
@@ -142,29 +172,47 @@ class DenoisingModelSS(BaseModel):
     def optimize_parameters(self, step, timesteps, sde=None):
         ### set terminal-state as FS
         self.optimizer.zero_grad()
+        # self.optimizer_fs.zero_grad()
 
         timesteps = timesteps.to(self.device)
 
-        # Get noise and score
+        ### First stage prediction
+        if self.FS is None:
+            with torch.amp.autocast(device_type="cuda", dtype=torch.bfloat16):
+                self.FS = self.fs_model(self.LQ)
+            # print(self.LQ.shape, self.FS.shape)
+
+
+
         ### set terminal-state as FS
-        sde.set_mu(self.FS)
-        noise = sde.noise_fn_cond(self.state, self.FS, self.LQ, timesteps.squeeze())
-        # sde.set_mu(self.LQ)
-        # noise = sde.noise_fn_cond(self.state, self.LQ, self.FS, timesteps.squeeze())
+        # sde.set_mu(self.FS)
+        # noise = sde.noise_fn_cond(self.state, self.FS, self.LQ, timesteps.squeeze())
+        
+        sde.set_mu(self.LQ)
+        # with torch.amp.autocast(device_type="cuda", dtype=torch.bfloat16):
+        noise = sde.noise_fn_cond(self.state, self.LQ, self.FS, timesteps.squeeze())
         
         score = sde.get_score_from_noise(noise, timesteps)
 
         # Learning the maximum likelihood objective for state x_{t-1}
         xt_1_expection = sde.reverse_sde_step_mean(self.state, score, timesteps)
         xt_1_optimum = sde.reverse_optimum_step(self.state, self.state_0, timesteps)
-        loss = self.weight * self.loss_fn(xt_1_expection, xt_1_optimum)
+
+        diffusion_loss = self.loss_fn(xt_1_expection, xt_1_optimum)
+        # fidelity_loss = self.loss_fn(self.FS, self.state_0)
+
+        loss = self.diff_weight * diffusion_loss
+        # loss = self.diff_weight * diffusion_loss + self.fid_weight * fidelity_loss
 
         loss.backward()
         self.optimizer.step()
+        # self.optimizer_fs.step()
         self.ema.update()
 
         # set log
         self.log_dict["loss"] = loss.item()
+        self.log_dict["diffusion_loss"] = diffusion_loss.item()
+        # self.log_dict["fidelity_loss"] = fidelity_loss.item()
 
     def test(self, sde=None, mode='posterior', save_states=False):
         # sde.set_mu(self.condition)
@@ -176,23 +224,22 @@ class DenoisingModelSS(BaseModel):
                 sde.set_model(self.ss_model)
 
                 ### set terminal-state as FS
-                sde.set_mu(self.FS)
-                self.output = sde.reverse_posterior_cond(self.state, cond=self.LQ, save_states=save_states)
+                # sde.set_mu(self.FS)
+                # self.output = sde.reverse_posterior_cond(self.state, cond=self.LQ, save_states=save_states)
 
-                # sde.set_mu(self.LQ)
-                # self.output = sde.reverse_posterior_cond(self.state, cond=self.FS, save_states=save_states)
+                sde.set_mu(self.LQ)
+                self.output = sde.reverse_posterior_cond(self.state, cond=self.FS, save_states=save_states)
                 
-            elif mode == 'posterior_test':
+            elif mode == 'posterior_two_stage':
                 # First stage prediction
-                sde.set_model(self.fs_model)
-                sde.set_mu(self.condition)
-                self.fs_output = sde.reverse_posterior(self.state, save_states=save_states, text_context=self.text_context, image_context=self.image_context)
-                
+                self.FS = self.fs_model(self.LQ)
+                # print(self.LQ.shape, self.FS.shape)
+
                 # Second stage prediction
                 sde.set_model(self.ss_model)
-                sde.set_mu(self.fs_output)
-                ss_noisy_state = sde.noise_state(self.fs_output)
-                self.output = sde.reverse_posterior_cond(ss_noisy_state, cond=self.condition, save_states=save_states, text_context=self.text_context, image_context=self.image_context)
+                sde.set_mu(self.FS)
+                ss_noisy_state = sde.noise_state(self.FS)
+                self.output = sde.reverse_posterior_cond(ss_noisy_state, cond=self.FS, save_states=save_states, text_context=self.text_context, image_context=self.image_context)
 
         self.ss_model.train()
 
@@ -233,7 +280,7 @@ class DenoisingModelSS(BaseModel):
             self.load_network(load_path_G, self.ss_model, self.opt["path"]["strict_load"])
 
     def load_fs(self):
-        load_path_G = self.opt["path"]["fs_pretrain_model_G"]
+        load_path_G = self.opt_ff["path"]["pretrain_model_G"]
         if load_path_G is not None:
             logger.info("Loading model for G [{:s}] ...".format(load_path_G))
             self.load_network(load_path_G, self.fs_model, self.opt["path"]["strict_load"])
@@ -241,3 +288,4 @@ class DenoisingModelSS(BaseModel):
     def save(self, iter_label):
         self.save_network(self.ss_model, "G", iter_label)
         self.save_network(self.ema.ema_model, "EMA", 'lastest')
+        self.save_network(self.fs_model, "FF", iter_label)

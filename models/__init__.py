@@ -3,7 +3,7 @@ import logging
 logger = logging.getLogger("base")
 
 
-def create_model(opt):
+def create_model(opt, **kwargs):
     model = opt["model"]
 
     if model == "denoising":
@@ -14,6 +14,6 @@ def create_model(opt):
         from .ff_model import FeedForwardModel as M
     else:
         raise NotImplementedError("Model [{:s}] not recognized.".format(model))
-    m = M(opt)
+    m = M(opt, **kwargs)
     logger.info("Model [{:s}] is created.".format(m.__class__.__name__))
     return m

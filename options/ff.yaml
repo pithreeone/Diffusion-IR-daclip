@@ -7,21 +7,6 @@ model: ff_model
 # normalize_to_neg1_1: true
 # save_lqgt: false
 
-# sde:
-#   max_sigma: 50
-#   T: 100
-#   schedule: cosine # linear, cosine
-#   eps: 0.005
-#   sampling_mode: posterior # sde or posterior
-  
-# degradation:
-#   # for denoising
-#   sigma: 25
-#   noise_type: G # Gaussian noise: G
-
-#   # for super-resolution
-#   scale: 4
-
 #### network structures
 network_G:
   which_model_G: UNet
