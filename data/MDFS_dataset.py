@@ -75,7 +75,7 @@ class MDFSDataset(data.Dataset):
 
             root = opt["first_stage_result"]
 
-            if deg_type == 'noisy_50':
+            if deg_type in ['noisy_15', 'noisy_25', 'noisy_50']:
                 FS_result_paths = util.get_image_paths(opt["data_type"], os.path.join(root, 'noisy'))
             else:
                 FS_result_paths = util.get_image_paths(opt["data_type"], os.path.join(root, deg_type))

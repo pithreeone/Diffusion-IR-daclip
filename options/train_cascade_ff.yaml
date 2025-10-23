@@ -3,7 +3,7 @@ name: universal-ir
 use_tb_logger: true
 model: denoising_ss
 # distortion: [motion-blurry,hazy,jpeg-compressed,low-light,noisy,raindrop,rainy,shadowed,snowy,uncompleted]
-distortion: [motion-blurry,hazy,low-light,noisy_50,rainy]
+distortion: [motion-blurry,hazy,low-light,noisy_25,rainy]
 # distortion: [rainy]
 # distortion: [motion-blurry]
 gpu_ids: [2,3]
@@ -30,14 +30,14 @@ datasets:
     name: Train_Dataset
     mode: MDFS
     dataroot: ../Warehouse/Diffusion-IR/datasets/train
-    # first_stage_result: results/fs_result_ff_mtk_large_train
-    first_stage_result: results/fs_result_ff_251015-195349_train
+    first_stage_result: results/fs_result_ff_mtk_large_train
+    # first_stage_result: results/fs_result_ff_251015-195349_train
     # first_stage_result: results/fs_result_rainTrainL_-1_1/prediction
     # first_stage_result: results/fs_result_rainTrainL_-1_1_all
 
     use_shuffle: true
     n_workers: 4  # per GPU
-    batch_size: 16
+    batch_size: 2
     patch_size: 256
     use_flip: true
     use_rot: true
@@ -46,10 +46,10 @@ datasets:
   val:
     name: Val_Dataset
     mode: MDFS
-    n_sample: 20
+    n_sample: 100
     dataroot: ../Warehouse/Diffusion-IR/datasets/daclip-val
-    # first_stage_result: results/fs_result_ff_mtk_large_test
-    first_stage_result: results/fs_result_ff_251015-195349_test
+    first_stage_result: results/fs_result_ff_mtk_large_test
+    # first_stage_result: results/fs_result_ff_251015-195349_test
     # dataroot: ../Warehouse/Diffusion-IR/datasets/train
     # first_stage_result: results/fs_result_rainTestL_-1_1/prediction
     # first_stage_result: results/fs_result_rainTestL_-1_1_all
@@ -58,6 +58,7 @@ datasets:
 #### network structures
 network_G:
   which_model_G: ConditionalUNet
+  amp_dtype: bfloat16     #  [float16, bfloat16, float32]
   setting:
     in_nc: 3
     out_nc: 3

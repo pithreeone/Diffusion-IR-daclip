@@ -23,11 +23,11 @@ degradation:
   scale: 4
 
 datasets:
-  # test1:
-  #   name: noisy
-  #   mode: LQGT
-  #   dataroot_GT: test-data/denoising_testsets/CBSD68
-  #   dataroot_LQ: test-data/denoising_testsets/CBSD68_25
+  test1:
+    name: noisy
+    mode: LQGT
+    dataroot_GT: test-data/denoising_testsets/CBSD68
+    dataroot_LQ: test-data/denoising_testsets/CBSD68_25
     # dataroot_GT: ../Warehouse/Diffusion-IR/datasets/train/noisy/GT
     # dataroot_LQ: ../Warehouse/Diffusion-IR/datasets/train/noisy/LQ
   # test2:
@@ -51,11 +51,11 @@ datasets:
   #   dataroot_LQ: test-data/GoPro/input
     # dataroot_GT: ../Warehouse/Diffusion-IR/datasets/train/motion-blurry/GT
     # dataroot_LQ: ../Warehouse/Diffusion-IR/datasets/train/motion-blurry/LQ
-  test5:
-    name: low-light
-    mode: LQGT
-    dataroot_GT: test-data/LOL/high
-    dataroot_LQ: test-data/LOL/low
+  # test5:
+  #   name: low-light
+  #   mode: LQGT
+  #   dataroot_GT: test-data/LOL/high
+  #   dataroot_LQ: test-data/LOL/low
     # dataroot_GT: ../Warehouse/Diffusion-IR/datasets/train/low-light/GT
     # dataroot_LQ: ../Warehouse/Diffusion-IR/datasets/train/low-light/LQ
 #### network structures

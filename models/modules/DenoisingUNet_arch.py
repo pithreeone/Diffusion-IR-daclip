@@ -17,7 +17,7 @@ from .module_util import (
     Identity)
 
 from .attention import SpatialTransformer
-
+from .diffusionmodules.openaimodel import AttentionBlock
 
 class ConditionalUNet(nn.Module):
     # def __init__(self, in_nc, out_nc, nf, ch_mult=[1, 2, 4, 4], 
@@ -105,6 +105,13 @@ class ConditionalUNet(nn.Module):
                 block_class(dim_in=dim_out + dim_in*2, dim_out=dim_out, time_emb_dim=time_dim) 
                 if self.cond_type == 'cond_module' else block_class(dim_in=dim_out + dim_in, dim_out=dim_out, time_emb_dim=time_dim),
                 Residual(PreNorm(dim_out, att_up)) if attn else LayerNorm(dim_out),
+                # AttentionBlock(
+                #             dim_out,
+                #             use_checkpoint=False,
+                #             num_heads=num_heads_out,
+                #             num_head_channels=num_head_channels,
+                #             use_new_attention_order=False,
+                #         ),
                 Upsample(dim_out, dim_in) if i!=0 else default_conv(dim_out, dim_in)
             ]))
 
