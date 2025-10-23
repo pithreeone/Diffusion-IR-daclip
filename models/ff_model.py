@@ -17,6 +17,13 @@ logger = logging.getLogger("base")
 class FeedForwardModel(BaseModel):
     def __init__(self, opt):
         super(FeedForwardModel, self).__init__(opt)
+        dtype_map = {
+            "float16": torch.float16,
+            "bfloat16": torch.bfloat16,
+            "float32": torch.float32,
+        }
+        self.amp_dtype = dtype_map[opt['network_G']['amp_dtype']]
+
         if opt["dist"]:
             self.rank = torch.distributed.get_rank()
         else:
@@ -122,8 +129,8 @@ class FeedForwardModel(BaseModel):
     def optimize_parameters(self, step):
         self.optimizer.zero_grad()
 
-        # print(self.inpu)
-        output = self.model(self.input)
+        with torch.amp.autocast(device_type="cuda", dtype=self.amp_dtype):
+            output = self.model(self.input)
         # output = self.model(self.target)
 
         # optimizer_idx = 0
@@ -161,7 +168,8 @@ class FeedForwardModel(BaseModel):
         # print(next(self.model.parameters()).device)
         # print(self.input.device)
         with torch.no_grad():
-            self.output = self.model(self.input)
+            with torch.amp.autocast(device_type="cuda", dtype=self.amp_dtype):
+                self.output = self.model(self.input)
             # self.output = self.model(self.target)
         
         self.model.train()

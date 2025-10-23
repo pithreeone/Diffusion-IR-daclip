@@ -25,7 +25,12 @@ logger = logging.getLogger("base")
 class DenoisingModelSS(BaseModel):
     def __init__(self, opt, opt_ff=None):
         super(DenoisingModelSS, self).__init__(opt)
-
+        dtype_map = {
+            "float16": torch.float16,
+            "bfloat16": torch.bfloat16,
+            "float32": torch.float32,
+        }
+        self.amp_dtype = dtype_map[opt['network_G']['amp_dtype']]
         if opt["dist"]:
             self.rank = torch.distributed.get_rank()
         else:
@@ -178,7 +183,7 @@ class DenoisingModelSS(BaseModel):
 
         ### First stage prediction
         if self.FS is None:
-            with torch.amp.autocast(device_type="cuda", dtype=torch.bfloat16):
+            with torch.amp.autocast(device_type="cuda", dtype=self.amp_dtype):
                 self.FS = self.fs_model(self.LQ)
             # print(self.LQ.shape, self.FS.shape)
 
@@ -189,8 +194,8 @@ class DenoisingModelSS(BaseModel):
         # noise = sde.noise_fn_cond(self.state, self.FS, self.LQ, timesteps.squeeze())
         
         sde.set_mu(self.LQ)
-        # with torch.amp.autocast(device_type="cuda", dtype=torch.bfloat16):
-        noise = sde.noise_fn_cond(self.state, self.LQ, self.FS, timesteps.squeeze())
+        with torch.amp.autocast(device_type="cuda", dtype=self.amp_dtype):
+            noise = sde.noise_fn_cond(self.state, self.LQ, self.FS, timesteps.squeeze())
         
         score = sde.get_score_from_noise(noise, timesteps)
 
@@ -228,7 +233,8 @@ class DenoisingModelSS(BaseModel):
                 # self.output = sde.reverse_posterior_cond(self.state, cond=self.LQ, save_states=save_states)
 
                 sde.set_mu(self.LQ)
-                self.output = sde.reverse_posterior_cond(self.state, cond=self.FS, save_states=save_states)
+                with torch.amp.autocast(device_type="cuda", dtype=self.amp_dtype):
+                    self.output = sde.reverse_posterior_cond(self.state, cond=self.FS, save_states=save_states)
                 
             elif mode == 'posterior_two_stage':
                 # First stage prediction

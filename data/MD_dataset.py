@@ -63,12 +63,23 @@ class MDDataset(data.Dataset):
                 GT_paths = GT_L
                 LR_paths = LR_L
             else:
-                GT_paths = util.get_image_paths(
-                    opt["data_type"], os.path.join(opt["dataroot"], deg_type, 'GT')
-                )  # GT list
-                LR_paths = util.get_image_paths(
-                    opt["data_type"], os.path.join(opt["dataroot"], deg_type, 'LQ')
-                )  # LR list
+                if deg_type == 'noisy_all':
+                    GT_paths = []
+                    LR_paths = []
+                    for noise_level in [15, 25, 50]:
+                        GT_paths += util.get_image_paths(
+                            opt["data_type"], os.path.join(opt["dataroot"], f'noisy_{noise_level}', 'GT')
+                        )  # GT list
+                        LR_paths += util.get_image_paths(
+                            opt["data_type"], os.path.join(opt["dataroot"], f'noisy_{noise_level}', 'LQ')
+                        )  # LR list
+                else:
+                    GT_paths = util.get_image_paths(
+                        opt["data_type"], os.path.join(opt["dataroot"], deg_type, 'GT')
+                    )  # GT list
+                    LR_paths = util.get_image_paths(
+                        opt["data_type"], os.path.join(opt["dataroot"], deg_type, 'LQ')
+                    )  # LR list
             self.distortion[deg_type] = (GT_paths, LR_paths)
         self.data_lens = [len(self.distortion[deg_type][0]) for deg_type in self.deg_types]
 
@@ -138,8 +149,9 @@ class MDDataset(data.Dataset):
         img_GT = torch.from_numpy(np.ascontiguousarray(np.transpose(img_GT, (2, 0, 1)))).float()
         img_LQ = torch.from_numpy(np.ascontiguousarray(np.transpose(img_LQ, (2, 0, 1)))).float()
 
-        img_GT = img_GT * 2.0 - 1.0
-        img_LQ = img_LQ * 2.0 - 1.0
+        if not self.opt["normalize_01"]:
+            img_GT = img_GT * 2.0 - 1.0
+            img_LQ = img_LQ * 2.0 - 1.0
 
         return {"GT": img_GT, "LQ": img_LQ, "LQ_clip": lq4clip,  "type": deg_type, "GT_path": GT_path}
 

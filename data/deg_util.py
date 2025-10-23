@@ -438,12 +438,12 @@ class LineDictionary:
             cnt += 1
         return lines
 
-# psf kernel
-import pickle
-pickledPsfFilename = os.path.join(os.path.dirname( __file__), "psf.pkl")
+# # psf kernel
+# import pickle
+# pickledPsfFilename = os.path.join(os.path.dirname( __file__), "psf.pkl")
 
-with open(pickledPsfFilename, 'rb') as pklfile:
-    psfDictionary = pickle.load(pklfile, encoding='latin1')
+# with open(pickledPsfFilename, 'rb') as pklfile:
+#     psfDictionary = pickle.load(pklfile, encoding='latin1')
 
 def psf_kernel():
     return random.choice(psfDictionary)
@@ -1017,9 +1017,9 @@ def wiener_filter_multi_channel(img, kernel, K=0.006, pad_s=20):
 
 ################################################################
 
-pickledUCDPsfFilename = os.path.join(os.path.dirname( __file__), "ucdpsf.pkl")
-with open(pickledUCDPsfFilename, 'rb') as pklfile:
-    ucdpsfDictionary = pickle.load(pklfile, encoding='latin1')
+# pickledUCDPsfFilename = os.path.join(os.path.dirname( __file__), "ucdpsf.pkl")
+# with open(pickledUCDPsfFilename, 'rb') as pklfile:
+#     ucdpsfDictionary = pickle.load(pklfile, encoding='latin1')
 
 
 def match_dim(data, dim):
