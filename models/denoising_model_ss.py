@@ -197,19 +197,19 @@ class DenoisingModelSS(BaseModel):
         with torch.amp.autocast(device_type="cuda", dtype=self.amp_dtype):
             noise = sde.noise_fn_cond(self.state, self.LQ, self.FS, timesteps.squeeze())
         
-        score = sde.get_score_from_noise(noise, timesteps)
+            score = sde.get_score_from_noise(noise, timesteps)
 
-        # Learning the maximum likelihood objective for state x_{t-1}
-        xt_1_expection = sde.reverse_sde_step_mean(self.state, score, timesteps)
-        xt_1_optimum = sde.reverse_optimum_step(self.state, self.state_0, timesteps)
+            # Learning the maximum likelihood objective for state x_{t-1}
+            xt_1_expection = sde.reverse_sde_step_mean(self.state, score, timesteps)
+            xt_1_optimum = sde.reverse_optimum_step(self.state, self.state_0, timesteps)
 
-        diffusion_loss = self.loss_fn(xt_1_expection, xt_1_optimum)
-        # fidelity_loss = self.loss_fn(self.FS, self.state_0)
+            diffusion_loss = self.loss_fn(xt_1_expection, xt_1_optimum)
+            # fidelity_loss = self.loss_fn(self.FS, self.state_0)
 
-        loss = self.diff_weight * diffusion_loss
-        # loss = self.diff_weight * diffusion_loss + self.fid_weight * fidelity_loss
+            loss = self.diff_weight * diffusion_loss
+            # loss = self.diff_weight * diffusion_loss + self.fid_weight * fidelity_loss
 
-        loss.backward()
+            loss.backward()
         self.optimizer.step()
         # self.optimizer_fs.step()
         self.ema.update()
@@ -238,14 +238,16 @@ class DenoisingModelSS(BaseModel):
                 
             elif mode == 'posterior_two_stage':
                 # First stage prediction
+                # with torch.amp.autocast(device_type="cuda", dtype=self.amp_dtype):
                 self.FS = self.fs_model(self.LQ)
                 # print(self.LQ.shape, self.FS.shape)
 
                 # Second stage prediction
                 sde.set_model(self.ss_model)
-                sde.set_mu(self.FS)
-                ss_noisy_state = sde.noise_state(self.FS)
-                self.output = sde.reverse_posterior_cond(ss_noisy_state, cond=self.FS, save_states=save_states, text_context=self.text_context, image_context=self.image_context)
+                sde.set_mu(self.LQ)
+                ss_noisy_state = sde.noise_state(self.LQ)
+                with torch.amp.autocast(device_type="cuda", dtype=self.amp_dtype):
+                    self.output = sde.reverse_posterior_cond(ss_noisy_state, cond=self.FS, save_states=save_states, text_context=self.text_context, image_context=self.image_context)
 
         self.ss_model.train()
 
@@ -257,6 +259,7 @@ class DenoisingModelSS(BaseModel):
         # out_dict["Input"] = self.condition.detach()[0].float().cpu()
         out_dict["Input"] = self.LQ.detach()[0].float().cpu()
         out_dict["Output"] = self.output.detach()[0].float().cpu()
+        out_dict["FS"] = self.FS
         if need_GT:
             out_dict["GT"] = self.state_0.detach()[0].float().cpu()
         return out_dict

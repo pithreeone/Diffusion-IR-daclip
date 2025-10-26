@@ -6,7 +6,7 @@ model: denoising_ss
 distortion: [motion-blurry,hazy,low-light,noisy_25,rainy]
 # distortion: [rainy]
 # distortion: [motion-blurry]
-gpu_ids: [2,3]
+gpu_ids: [4, 5]
 
 sde:
   max_sigma: 50
@@ -37,7 +37,7 @@ datasets:
 
     use_shuffle: true
     n_workers: 4  # per GPU
-    batch_size: 2
+    batch_size: 16
     patch_size: 256
     use_flip: true
     use_rot: true
@@ -58,7 +58,7 @@ datasets:
 #### network structures
 network_G:
   which_model_G: ConditionalUNet
-  amp_dtype: bfloat16     #  [float16, bfloat16, float32]
+  amp_dtype: float32     #  [float16, bfloat16, float32]
   setting:
     in_nc: 3
     out_nc: 3
@@ -67,7 +67,7 @@ network_G:
     context_dim: 512
     use_daclip_context: false
     cond_type: concat                      # [concat, cond_module]
-    attn: true
+    attn: linear                             # [spatial, linear, false]
 
 #### path
 path:
@@ -101,9 +101,9 @@ train:
   fidelity_weight: 0.5
 
   manual_seed: 0
-  val_freq: !!float 1e4
+  val_freq: !!float 4e4
 
 #### logger
 logger:
   print_freq: 200
-  save_checkpoint_freq: !!float 1e4
+  save_checkpoint_freq: !!float 4e4

@@ -19,6 +19,28 @@ from .module_util import (
 from .attention import SpatialTransformer
 from .diffusionmodules.openaimodel import AttentionBlock
 
+class SpatialModulationBlock(nn.Module):
+    def __init__(self, in_channels, hidden_channels=None):
+        super().__init__()
+        hidden_channels = hidden_channels or in_channels // 2
+        
+        # 1x1 convs to generate modulation map
+        self.modulator = nn.Sequential(
+            nn.Conv2d(in_channels, hidden_channels, 1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(hidden_channels, 1, 1),  # output spatial weight map
+            nn.Sigmoid()  # ensure weights in [0,1]
+        )
+
+    def forward(self, cond_feat):
+        """
+        cond_feat: condition feature map (B, C, H, W)
+        dec_feat: decoder feature map (B, C, H, W)
+        """
+        w = self.modulator(cond_feat)  # (B, 1, H, W)
+        out = cond_feat * w  # modulate and keep residual
+        return out
+
 class ConditionalUNet(nn.Module):
     # def __init__(self, in_nc, out_nc, nf, ch_mult=[1, 2, 4, 4], 
     #                 context_dim=512, use_degra_context=True, use_image_context=False, upscale=1):
@@ -27,7 +49,7 @@ class ConditionalUNet(nn.Module):
         super().__init__()
         self.depth = len(ch_mult)
         self.upscale = upscale # not used
-        self.context_dim = -1 if context_dim is None else context_dim
+        # self.context_dim = -1 if context_dim is None else context_dim
         # self.use_image_context = use_image_context
         # self.use_degra_context = use_degra_context
         self.use_image_context = self.use_degra_context = self.use_daclip_context = use_daclip_context
@@ -43,6 +65,7 @@ class ConditionalUNet(nn.Module):
         self.init_conv = default_conv(in_nc*in_ch_scale, nf, 7)
         if self.cond_type == 'cond_module':
             self.init_conv_cond = default_conv(in_nc, nf, 7)
+            self.init_conv_cond = default_conv(in_nc*2, nf, 7)
         
         # time embeddings
         time_dim = nf * 4
@@ -64,18 +87,20 @@ class ConditionalUNet(nn.Module):
             nn.Linear(time_dim, time_dim)
         )
 
-        if self.context_dim > 0 and self.use_degra_context: 
-            self.prompt = nn.Parameter(torch.rand(1, time_dim))
-            self.text_mlp = nn.Sequential(
-                nn.Linear(context_dim, time_dim), NonLinearity(),
-                nn.Linear(time_dim, time_dim))
-            self.prompt_mlp = nn.Linear(time_dim, time_dim)
+        # if self.context_dim > 0 and self.use_degra_context: 
+        #     self.prompt = nn.Parameter(torch.rand(1, time_dim))
+        #     self.text_mlp = nn.Sequential(
+        #         nn.Linear(context_dim, time_dim), NonLinearity(),
+        #         nn.Linear(time_dim, time_dim))
+        #     self.prompt_mlp = nn.Linear(time_dim, time_dim)
 
         # layers
         self.downs = nn.ModuleList([])
         self.ups = nn.ModuleList([])
         self.cond_downs = nn.ModuleList([])
         ch_mult = [1] + ch_mult
+
+        self.SMblocks = nn.ModuleList([])
 
         for i in range(self.depth):
             dim_in = nf * ch_mult[i]
@@ -85,33 +110,58 @@ class ConditionalUNet(nn.Module):
             num_heads_out = dim_out // num_head_channels
             dim_head_in = dim_in // num_heads_in
 
-            if self.use_image_context and context_dim > 0:
-                att_down = LinearAttention(dim_in) if i < 3 else SpatialTransformer(dim_in, num_heads_in, dim_head, depth=1, context_dim=context_dim)
-                att_up = LinearAttention(dim_out) if i < 3 else SpatialTransformer(dim_out, num_heads_out, dim_head, depth=1, context_dim=context_dim)
-            else:
+            # if self.use_image_context and context_dim > 0:
+            #     att_down = LinearAttention(dim_in) if i < 3 else SpatialTransformer(dim_in, num_heads_in, dim_head, depth=1, context_dim=context_dim)
+            #     att_up = LinearAttention(dim_out) if i < 3 else SpatialTransformer(dim_out, num_heads_out, dim_head, depth=1, context_dim=context_dim)
+            # else:
+            #     att_down = LinearAttention(dim_in) # if i < 2 else Attention(dim_in)
+            #     att_up = LinearAttention(dim_out) # if i < 2 else Attention(dim_out)
+
+            if attn == "spatial":
+                if i in [3]:
+                    att_module_down = AttentionBlock(dim_in, use_checkpoint=False, num_heads=num_heads_in,
+                        num_head_channels=num_head_channels, use_new_attention_order=False)
+                    att_module_up = AttentionBlock(dim_out, use_checkpoint=False, num_heads=num_heads_out,
+                        num_head_channels=num_head_channels, use_new_attention_order=False)
+                else:
+                    att_down = LinearAttention(dim_in) # if i < 2 else Attention(dim_in)
+                    att_up = LinearAttention(dim_out) # if i < 2 else Attention(dim_out)
+                    att_module_down = Residual(PreNorm(dim_in, att_down))
+                    att_module_up = Residual(PreNorm(dim_out, att_up))
+            elif attn == "linear":
                 att_down = LinearAttention(dim_in) # if i < 2 else Attention(dim_in)
                 att_up = LinearAttention(dim_out) # if i < 2 else Attention(dim_out)
+                att_module_down = Residual(PreNorm(dim_in, att_down))
+                att_module_up = Residual(PreNorm(dim_out, att_up))
+            elif attn == "none":
+                att_module_down = LayerNorm(dim_in)
+                att_module_up = LayerNorm(dim_out)
+            else:
+                raise ValueError(f"Unknown attn_type {attn_type}")
 
             self.downs.append(nn.ModuleList([
                 block_class(dim_in=dim_in, dim_out=dim_in, time_emb_dim=time_dim),
                 block_class(dim_in=dim_in, dim_out=dim_in, time_emb_dim=time_dim),
-                Residual(PreNorm(dim_in, att_down)) if attn else LayerNorm(dim_in),
+
+                # Residual(PreNorm(dim_in, att_down)) if attn else LayerNorm(dim_in),
+                att_module_down,
                 Downsample(dim_in, dim_out) if i != (self.depth-1) else default_conv(dim_in, dim_out)
             ]))
 
             self.ups.insert(0, nn.ModuleList([
+                # First block
                 block_class(dim_in=dim_out + dim_in, dim_out=dim_out, time_emb_dim=time_dim),
-                # block_class(dim_in=dim_out + dim_in, dim_out=dim_out, time_emb_dim=time_dim),
-                block_class(dim_in=dim_out + dim_in*2, dim_out=dim_out, time_emb_dim=time_dim) 
-                if self.cond_type == 'cond_module' else block_class(dim_in=dim_out + dim_in, dim_out=dim_out, time_emb_dim=time_dim),
-                Residual(PreNorm(dim_out, att_up)) if attn else LayerNorm(dim_out),
-                # AttentionBlock(
-                #             dim_out,
-                #             use_checkpoint=False,
-                #             num_heads=num_heads_out,
-                #             num_head_channels=num_head_channels,
-                #             use_new_attention_order=False,
-                #         ),
+                # block_class(dim_in=dim_out + dim_in*2, dim_out=dim_out, time_emb_dim=time_dim),    # option:4 (decoder, concat embedding)
+
+                # Second block
+                # block_class(dim_in=dim_out + dim_in, dim_out=dim_out, time_emb_dim=time_dim),    # option:1
+                # block_class(dim_in=dim_out + dim_in*2, dim_out=dim_out, time_emb_dim=time_dim)   # option:2
+                #     if self.cond_type == 'cond_module' else block_class(dim_in=dim_out + dim_in, dim_out=dim_out, time_emb_dim=time_dim),
+                block_class(dim_in=dim_out + dim_in, dim_out=dim_out, time_emb_dim=time_dim),    # option:3 (add embedding)
+                # block_class(dim_in=dim_out + dim_in*2, dim_out=dim_out, time_emb_dim=time_dim),    # option:4 (decoder, concat embedding)
+
+                # Residual(PreNorm(dim_out, att_up)) if attn else LayerNorm(dim_out),
+                att_module_up,
                 Upsample(dim_out, dim_in) if i!=0 else default_conv(dim_out, dim_in)
             ]))
 
@@ -120,18 +170,52 @@ class ConditionalUNet(nn.Module):
                     block_class(dim_in=dim_in, dim_out=dim_in, time_emb_dim=time_dim),
                     Downsample(dim_in, dim_out) if i != (self.depth-1) else Identity()
                 ]))
+                self.SMblocks.append(SpatialModulationBlock(dim_in))
 
         mid_dim = nf * ch_mult[-1]
         num_heads_mid = mid_dim // num_head_channels
+
+
         self.mid_block1 = block_class(dim_in=mid_dim, dim_out=mid_dim, time_emb_dim=time_dim)
-        if self.use_image_context and context_dim > 0:
-            self.mid_attn = Residual(PreNorm(mid_dim, SpatialTransformer(mid_dim, num_heads_mid, dim_head, depth=1, context_dim=context_dim)))
-        else:
-            self.mid_attn = Residual(PreNorm(mid_dim, LinearAttention(mid_dim))) if attn else LayerNorm(mid_dim)
+        # self.mid_attn = Residual(PreNorm(mid_dim, LinearAttention(mid_dim))) if attn else LayerNorm(mid_dim)
+        # self.mid_attn = AttentionBlock(
+        #                     mid_dim,
+        #                     use_checkpoint=False,
+        #                     num_heads=num_heads_out,
+        #                     num_head_channels=num_head_channels,
+        #                     use_new_attention_order=False,
+        #                 )
+        if attn == "spatial":
+            self.mid_attn = AttentionBlock(mid_dim, use_checkpoint=False, num_heads=num_heads_out,
+                            num_head_channels=num_head_channels, use_new_attention_order=False)
+        elif attn == "linear":
+            self.mid_attn = Residual(PreNorm(mid_dim, LinearAttention(mid_dim)))
+        elif attn == "none":
+            self.mid_attn = LayerNorm(mid_dim)
         self.mid_block2 = block_class(dim_in=mid_dim, dim_out=mid_dim, time_emb_dim=time_dim)
 
         self.final_res_block = block_class(dim_in=nf * 2, dim_out=nf, time_emb_dim=time_dim)
         self.final_conv = nn.Conv2d(nf, out_nc, 3, 1, 1)
+
+    def make_attention_block(
+        i, dim_in, att_down, num_heads_in, num_head_channels,
+        use_checkpoint=False, attn_type="none"
+    ):
+        if attn_type == "spatial":
+            return AttentionBlock(
+                dim_in,
+                use_checkpoint=use_checkpoint,
+                num_heads=num_heads_in,
+                num_head_channels=num_head_channels,
+                use_new_attention_order=False,
+            )
+        elif attn_type == "residual":
+            return Residual(PreNorm(dim_in, att_down))
+        elif attn_type == "none":
+            # simplest placeholder (identity)
+            return nn.Identity()
+        else:
+            raise ValueError(f"Unknown attn_type {attn_type}")
 
     def check_image_size(self, x, h, w):
         s = int(math.pow(2, self.depth))
@@ -162,52 +246,56 @@ class ConditionalUNet(nn.Module):
         x_ = x.clone()
 
         t = self.time_mlp(time) 
-        if self.context_dim > 0:
-            if self.use_degra_context and text_context is not None:
-                prompt_embedding = torch.softmax(self.text_mlp(text_context), dim=1) * self.prompt
-                prompt_embedding = self.prompt_mlp(prompt_embedding)
-                t = t + prompt_embedding
-
-            if self.use_image_context and image_context is not None:
-                image_context = image_context.unsqueeze(1)
 
         h = []
-        cond_embedding = []
         for b1, b2, attn, downsample in self.downs:
             x = b1(x, t)
             h.append(x)
 
             x = b2(x, t)
-            x = attn(x, context=image_context) if self.attn else attn(x)
+            x = attn(x)
             h.append(x)
 
             x = downsample(x)
 
+        cond_embedding = []
         if self.cond_type == 'cond_module':
-            cond = cond - mu
+            # cond = cond - mu
+            cond = torch.cat([cond, mu], dim=1)
             cond = self.check_image_size(cond, H, W)
             
             cond = self.init_conv_cond(cond)
-            for b, downsample in self.cond_downs:
+            n = len(self.cond_downs)
+            for i, (b, downsample) in enumerate(self.cond_downs):
                 cond = b(cond, t)
-                cond_embedding.append(cond)
-
+                # cond_embedding.append(cond)
+                cond_embedding.append(self.SMblocks[i](cond))
                 cond = downsample(cond)
 
         x = self.mid_block1(x, t)
-        x = self.mid_attn(x, context=image_context) if self.attn else self.mid_attn(x)
+        x = self.mid_attn(x)
         x = self.mid_block2(x, t)
+
         for b1, b2, attn, upsample in self.ups:
-            x = torch.cat([x, h.pop()], dim=1)
-            x = b1(x, t)
+            # x = torch.cat([x, h.pop()], dim=1)
+            # x = b1(x, t)
             
             if self.cond_type == 'cond_module':
-                x = torch.cat([x, h.pop(), cond_embedding.pop()], dim=1)
+                cond_emb = cond_embedding.pop()
+                x = torch.cat([x, h.pop()+cond_emb], dim=1)
+                # x = torch.cat([x, h.pop(), cond_emb], dim=1)
+                x = b1(x, t)
+                # x = torch.cat([x, h.pop(), cond_embedding.pop()], dim=1)
+                x = torch.cat([x, h.pop()+cond_emb], dim=1)
+                # x = torch.cat([x, h.pop(), cond_emb], dim=1)
+                x = b2(x, t)
             else:
                 x = torch.cat([x, h.pop()], dim=1)
-            x = b2(x, t)
+                x = b1(x, t)
+                x = torch.cat([x, h.pop()], dim=1)
+                x = b2(x, t)
 
-            x = attn(x, context=image_context) if self.attn else attn(x)
+            x = attn(x)
             x = upsample(x)
 
         x = torch.cat([x, x_], dim=1)

@@ -28,6 +28,7 @@ opt_ff = option.simple_parse("options/ff.yaml")
 
 opt = option.dict_to_nonedict(opt)
 opt_ff = option.dict_to_nonedict(opt_ff)
+opt_ff["gpu_ids"] = opt["gpu_ids"]
 
 use_daclip_context = opt['network_G']['setting']['use_daclip_context']
 
@@ -66,8 +67,8 @@ for phase, dataset_opt in sorted(opt["datasets"].items()):
     test_loaders.append(test_loader)
 
 # load pretrained model by default
-model = create_model(opt)
-model_ff = create_model(opt_ff)
+model = create_model(opt, opt_ff=opt_ff)
+# model_ff = create_model(opt_ff)
 device = model.device
 
 if use_daclip_context:
@@ -118,15 +119,15 @@ for test_loader in test_loaders:
 
         #### input dataset_LQ
         LQ, GT = test_data["LQ"], test_data["GT"]
-        model_ff.feed_data(LQ, GT)
-        FS = model_ff.test()
-        # noisy_state = sde.noise_state(LQ)
-        noisy_state = sde.noise_state(FS)
+        # model_ff.feed_data(LQ, GT)
+        # FS = model_ff.test()
+        noisy_state = sde.noise_state(LQ)
+        # noisy_state = sde.noise_state(FS)
 
-        model.feed_data(noisy_state, LQ, GT=GT, FS=FS)
+        model.feed_data(noisy_state, LQ, GT=GT)
 
         tic = time.time()
-        model.test(sde)
+        model.test(sde, mode=sampling_mode)
         toc = time.time()
         test_times.append(toc - tic)
 
@@ -135,7 +136,7 @@ for test_loader in test_loaders:
         # output = util.tensor2img(SR_img.squeeze())  # uint8
         # LQ_ = util.tensor2img(visuals["Input"].squeeze())  # uint8
         # GT_ = util.tensor2img(visuals["GT"].squeeze())  # uint8
-
+        FS = visuals["FS"]
         if opt["color_correction"]:
             SR_img = color_correction(SR_img.unsqueeze(0), FS.cpu())[0]
 
