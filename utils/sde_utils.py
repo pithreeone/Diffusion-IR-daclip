@@ -323,6 +323,7 @@ class IRSDE(SDE):
         for t in tqdm(reversed(range(1, T + 1))):
             # noise = self.noise_fn(x, t, self.sample_scale, **kwargs)
             noise = self.noise_fn_cond(x, self.mu, cond, t, **kwargs)
+            # noise, logits = self.noise_fn_cond(x, self.mu, cond, t, **kwargs)
             x = self.reverse_posterior_step(x, noise, t)
 
             if save_states: # only consider to save 100 images
@@ -334,6 +335,7 @@ class IRSDE(SDE):
                     tvutils.save_image(torch.cat([x_L, x_R], dim=3).data, f'{save_dir}/state_{idx}.png', normalize=False)
 
         return x
+        # return x, logits
 
     # sample ode using Black-box ODE solver (not used)
     def ode_sampler(self, xt, rtol=1e-5, atol=1e-5, method='RK45', eps=1e-3,):

@@ -162,7 +162,10 @@ class DenoisingModelSS(BaseModel):
             self.ema = EMA(self.ss_model, beta=0.995, update_every=10).to(self.device)
             self.log_dict = OrderedDict()
 
-    def feed_data(self, state, LQ, GT=None, FS=None, text_context=None, image_context=None):
+            self.crossentropy = nn.CrossEntropyLoss()
+
+
+    def feed_data(self, state, LQ, GT=None, FS=None, deg_type=None):
         self.state = state.to(self.device)    # noisy_state
         # self.condition = LQ.to(self.device)  # LQ
         self.LQ = LQ.to(self.device)  # LQ
@@ -171,8 +174,8 @@ class DenoisingModelSS(BaseModel):
             self.FS = FS.to(self.device) # FS
         if GT is not None:
             self.state_0 = GT.to(self.device)  # GT
-        self.text_context = text_context
-        self.image_context = image_context
+        if deg_type is not None:
+            self.deg_type = deg_type.to(self.device)
 
     def optimize_parameters(self, step, timesteps, sde=None):
         ### set terminal-state as FS
@@ -196,6 +199,7 @@ class DenoisingModelSS(BaseModel):
         sde.set_mu(self.LQ)
         with torch.amp.autocast(device_type="cuda", dtype=self.amp_dtype):
             noise = sde.noise_fn_cond(self.state, self.LQ, self.FS, timesteps.squeeze())
+            # noise, logits = sde.noise_fn_cond(self.state, self.LQ, self.FS, timesteps.squeeze())
         
             score = sde.get_score_from_noise(noise, timesteps)
 
@@ -206,7 +210,10 @@ class DenoisingModelSS(BaseModel):
             diffusion_loss = self.loss_fn(xt_1_expection, xt_1_optimum)
             # fidelity_loss = self.loss_fn(self.FS, self.state_0)
 
+            # cls_loss = self.crossentropy(logits, self.deg_type)
+
             loss = self.diff_weight * diffusion_loss
+            # loss = self.diff_weight * diffusion_loss + cls_loss
             # loss = self.diff_weight * diffusion_loss + self.fid_weight * fidelity_loss
 
             loss.backward()
@@ -216,7 +223,7 @@ class DenoisingModelSS(BaseModel):
 
         # set log
         self.log_dict["loss"] = loss.item()
-        self.log_dict["diffusion_loss"] = diffusion_loss.item()
+        # self.log_dict["diffusion_loss"] = diffusion_loss.item()
         # self.log_dict["fidelity_loss"] = fidelity_loss.item()
 
     def test(self, sde=None, mode='posterior', save_states=False):
@@ -234,20 +241,36 @@ class DenoisingModelSS(BaseModel):
 
                 sde.set_mu(self.LQ)
                 with torch.amp.autocast(device_type="cuda", dtype=self.amp_dtype):
-                    self.output = sde.reverse_posterior_cond(self.state, cond=self.FS, save_states=save_states)
-                
+                    # self.output = sde.reverse_posterior_cond(self.state, cond=self.FS, save_states=save_states)
+                    self.output, logits = sde.reverse_posterior_cond(self.state, cond=self.FS, save_states=save_states)
+
+                # pred = logits.argmax(dim=1)   # shape: (N,)
+                # print(pred, self.deg_type)
+                # self.correct = (pred == self.deg_type).sum().item()
+                # self.total = self.deg_type.size(0)
+
             elif mode == 'posterior_two_stage':
                 # First stage prediction
-                # with torch.amp.autocast(device_type="cuda", dtype=self.amp_dtype):
-                self.FS = self.fs_model(self.LQ)
-                # print(self.LQ.shape, self.FS.shape)
+                with torch.amp.autocast(device_type="cuda", dtype=self.amp_dtype):
+                    self.FS = self.fs_model(self.LQ)
 
                 # Second stage prediction
                 sde.set_model(self.ss_model)
                 sde.set_mu(self.LQ)
                 ss_noisy_state = sde.noise_state(self.LQ)
                 with torch.amp.autocast(device_type="cuda", dtype=self.amp_dtype):
-                    self.output = sde.reverse_posterior_cond(ss_noisy_state, cond=self.FS, save_states=save_states, text_context=self.text_context, image_context=self.image_context)
+                    self.output = sde.reverse_posterior_cond(ss_noisy_state, cond=self.FS, save_states=save_states)
+                    # self.output, _ = sde.reverse_posterior_cond(ss_noisy_state, cond=self.FS, save_states=save_states)
+            elif mode == 'classifier':
+                self.FS = self.fs_model(self.LQ)
+                timesteps = torch.zeros((self.FS.shape[0]))
+                noise, logits = sde.noise_fn_cond(self.state, self.LQ, self.FS, timesteps)
+                pred = logits.argmax(dim=1)   # shape: (N,)
+                # print(pred, self.deg_type)
+                self.correct = (pred == self.deg_type).sum().item()
+                self.total = self.deg_type.size(0)
+                # print(self.correct, self.total)
+                self.output = self.FS
 
         self.ss_model.train()
 

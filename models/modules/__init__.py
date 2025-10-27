@@ -1,2 +1,3 @@
 from .DenoisingUNet_arch import ConditionalUNet
+from .DenoisingUNet_arch_classifier import ConditionalUNetClassifier
 from .UNet_arch import UNet

@@ -241,7 +241,7 @@ def main():
             if "FS" in train_data:
                 LQ, GT, FS, deg_type = train_data["LQ"], train_data["GT"], train_data["FS"], train_data["type"]
                 timesteps, states = sde.generate_random_states(x0=GT, mu=LQ)
-                model.feed_data(states, LQ, GT=GT, FS=FS) # xt, mu, x0
+                model.feed_data(states, LQ, GT=GT, FS=FS, deg_type=deg_type) # xt, mu, x0
             else:
                 LQ, GT, deg_type = train_data["LQ"], train_data["GT"], train_data["type"]
                 timesteps, states = sde.generate_random_states(x0=GT, mu=LQ)
@@ -293,13 +293,16 @@ def main():
                 avg_psnr = 0.0
                 avg_psnr_fs = 0.0    # baseline: first stage
                 idx = 0
+
+                correct = 0
+                total = 0
                 for _, val_data in enumerate(val_loader):
 
                     # LQ, GT, FS, deg_type = val_data["LQ"], val_data["GT"], val_data["FS"], val_data["type"]
                     if "FS" in val_data:
                         LQ, GT, FS, deg_type = val_data["LQ"], val_data["GT"], val_data["FS"], val_data["type"]
                         noisy_state = sde.noise_state(LQ)
-                        model.feed_data(noisy_state, LQ, GT=GT, FS=FS) # xt, mu, x0
+                        model.feed_data(noisy_state, LQ, GT=GT, FS=FS, deg_type=deg_type) # xt, mu, x0
                     else:
                         LQ, GT, deg_type = val_data["LQ"], val_data["GT"], val_data["type"]
                         noisy_state = sde.noise_state(LQ)
@@ -317,6 +320,8 @@ def main():
 
                     model.test(sde, mode=opt['sde']['sampling_mode'])
                     visuals = model.get_current_visuals()
+                    # correct += model.correct
+                    # total += model.total
 
                     output = util.tensor2img((visuals["Output"].squeeze()+1.0)/2.0)  # uint8
                     gt_img = util.tensor2img((GT.squeeze()+1.0)/2.0)  # uint8
@@ -349,6 +354,7 @@ def main():
                         epoch, current_step, avg_psnr, avg_psnr_fs
                     )
                 )
+                # print(f"Accuracy: {correct/total}", correct, total)
                 print("<epoch:{:3d}, iter:{:8,d}, psnr: {:.6f}, psnr_fs: {:.6f}".format(
                         epoch, current_step, avg_psnr, avg_psnr_fs
                     ))

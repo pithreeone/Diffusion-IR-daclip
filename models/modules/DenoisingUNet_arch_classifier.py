@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torchvision.utils import save_image
+from torchvision import models
 import math
 
 import functools
@@ -40,9 +40,9 @@ class SpatialModulationBlock(nn.Module):
         """
         w = self.modulator(cond_feat)  # (B, 1, H, W)
         out = cond_feat * w  # modulate and keep residual
-        return out, w
+        return out
 
-class ConditionalUNet(nn.Module):
+class ConditionalUNetClassifier(nn.Module):
     # def __init__(self, in_nc, out_nc, nf, ch_mult=[1, 2, 4, 4], 
     #                 context_dim=512, use_degra_context=True, use_image_context=False, upscale=1):
     def __init__(self, in_nc, out_nc, nf, ch_mult=[1, 2, 4, 4], 
@@ -87,6 +87,10 @@ class ConditionalUNet(nn.Module):
             nn.GELU(),
             nn.Linear(time_dim, time_dim)
         )
+
+        self.text_mlp = nn.Sequential(
+            nn.Linear(context_dim, time_dim), NonLinearity(),
+            nn.Linear(time_dim, time_dim))
 
         # if self.context_dim > 0 and self.use_degra_context: 
         #     self.prompt = nn.Parameter(torch.rand(1, time_dim))
@@ -155,10 +159,10 @@ class ConditionalUNet(nn.Module):
                 # block_class(dim_in=dim_out + dim_in*2, dim_out=dim_out, time_emb_dim=time_dim),    # option:4 (decoder, concat embedding)
 
                 # Second block
-                block_class(dim_in=dim_out + dim_in, dim_out=dim_out, time_emb_dim=time_dim),    # option:1
+                # block_class(dim_in=dim_out + dim_in, dim_out=dim_out, time_emb_dim=time_dim),    # option:1
                 # block_class(dim_in=dim_out + dim_in*2, dim_out=dim_out, time_emb_dim=time_dim)   # option:2
                 #     if self.cond_type == 'cond_module' else block_class(dim_in=dim_out + dim_in, dim_out=dim_out, time_emb_dim=time_dim),
-                # block_class(dim_in=dim_out + dim_in, dim_out=dim_out, time_emb_dim=time_dim),    # option:3 (add embedding)
+                block_class(dim_in=dim_out + dim_in, dim_out=dim_out, time_emb_dim=time_dim),    # option:3 (add embedding)
                 # block_class(dim_in=dim_out + dim_in*2, dim_out=dim_out, time_emb_dim=time_dim),    # option:4 (decoder, concat embedding)
 
                 # Residual(PreNorm(dim_out, att_up)) if attn else LayerNorm(dim_out),
@@ -198,6 +202,14 @@ class ConditionalUNet(nn.Module):
         self.final_res_block = block_class(dim_in=nf * 2, dim_out=nf, time_emb_dim=time_dim)
         self.final_conv = nn.Conv2d(nf, out_nc, 3, 1, 1)
 
+        # Classifier
+        self.prompt = nn.Parameter(torch.rand(1, time_dim))
+        self.classifier = models.resnet18(weights="IMAGENET1K_V1")
+        in_features = self.classifier.fc.in_features
+        self.classifier.fc = nn.Identity()   # <--- this makes ResNet output the embedding (size 512)
+        self.cls_linear = nn.Linear(in_features, 5)   # 5 classes
+        self.prompt_mlp = nn.Linear(time_dim, time_dim)
+
     def make_attention_block(
         i, dim_in, att_down, num_heads_in, num_head_channels,
         use_checkpoint=False, attn_type="none"
@@ -232,21 +244,32 @@ class ConditionalUNet(nn.Module):
             time = torch.tensor([time]).to(xt.device)
 
         x = xt - mu
+        prompt_embedding = None
         if cond is not None and self.cond_type == 'concat':
+            residual_input = cond-mu
+            deg_embedding = self.classifier(residual_input)
+            logits = self.cls_linear(deg_embedding)
+            deg_embedding = self.text_mlp(deg_embedding)
+            deg_embedding = torch.softmax(deg_embedding, dim=1) * self.prompt
+            prompt_embedding = self.prompt_mlp(deg_embedding)
+
             x = torch.cat([x, mu, cond-mu], dim=1)
             # x = torch.cat([x, mu, cond], dim=1)
             # x = torch.cat([x, cond, mu-cond], dim=1)
             # x = torch.cat([x, mu, mu-cond], dim=1)
         else:
             x = torch.cat([x, mu], dim=1)
-
+        
         H, W = x.shape[2:]
         x = self.check_image_size(x, H, W)
 
         x = self.init_conv(x)
         x_ = x.clone()
 
-        t = self.time_mlp(time) 
+        if prompt_embedding is not None:
+            t = self.time_mlp(time) + prompt_embedding
+        else:
+            t = self.time_mlp(time)
 
         h = []
         for b1, b2, attn, downsample in self.downs:
@@ -270,14 +293,7 @@ class ConditionalUNet(nn.Module):
             for i, (b, downsample) in enumerate(self.cond_downs):
                 cond = b(cond, t)
                 # cond_embedding.append(cond)
-                cond, mask = self.SMblocks[i](cond)
-                if i == 0 and time.item() == 99:
-                    mask = mask.squeeze()
-                    mask = mask[1:-1, 1:-1]
-                    mask = (mask - mask.min()) / (mask.max() - mask.min())
-                    save_image(mask, "output.png")
-                    # print(mask.shape)
-                cond_embedding.append(cond)
+                cond_embedding.append(self.SMblocks[i](cond))
                 cond = downsample(cond)
 
         x = self.mid_block1(x, t)
@@ -290,12 +306,12 @@ class ConditionalUNet(nn.Module):
             
             if self.cond_type == 'cond_module':
                 cond_emb = cond_embedding.pop()
-                # x = torch.cat([x, h.pop()+cond_emb], dim=1)
-                x = torch.cat([x, h.pop(), cond_emb], dim=1)
+                x = torch.cat([x, h.pop()+cond_emb], dim=1)
+                # x = torch.cat([x, h.pop(), cond_emb], dim=1)
                 x = b1(x, t)
                 # x = torch.cat([x, h.pop(), cond_embedding.pop()], dim=1)
-                # x = torch.cat([x, h.pop()+cond_emb], dim=1)
-                x = torch.cat([x, h.pop(), cond_emb], dim=1)
+                x = torch.cat([x, h.pop()+cond_emb], dim=1)
+                # x = torch.cat([x, h.pop(), cond_emb], dim=1)
                 x = b2(x, t)
             else:
                 x = torch.cat([x, h.pop()], dim=1)
@@ -313,7 +329,7 @@ class ConditionalUNet(nn.Module):
 
         x = x[..., :H, :W].contiguous()
         
-        return x
+        return x, logits
 
 
 

@@ -174,7 +174,7 @@ class MDFSDataset(data.Dataset):
             img_LQ = img_LQ * 2.0 - 1.0
             img_FS = img_FS * 2.0 - 1.0
 
-        return {"GT": img_GT, "LQ": img_LQ, "LQ_clip": lq4clip, "FS": img_FS, "type": deg_type, "GT_path": GT_path}
+        return {"GT": img_GT, "LQ": img_LQ, "LQ_clip": lq4clip, "FS": img_FS, "type": torch.tensor(type_id), "GT_path": GT_path}
 
     def __len__(self):
         return np.sum(self.data_lens)
