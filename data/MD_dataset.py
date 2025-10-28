@@ -117,7 +117,7 @@ class MDDataset(data.Dataset):
             None, LQ_path, None
         )  # return: Numpy float32, HWC, BGR, [0,1]
 
-        if self.opt["phase"] == "train":
+        if self.opt["phase"] in ["train", "valaug"]:
             H, W, C = img_GT.shape
 
             rnd_h = random.randint(0, max(0, H - self.size))
@@ -153,7 +153,7 @@ class MDDataset(data.Dataset):
             img_GT = img_GT * 2.0 - 1.0
             img_LQ = img_LQ * 2.0 - 1.0
 
-        return {"GT": img_GT, "LQ": img_LQ, "LQ_clip": lq4clip,  "type": deg_type, "GT_path": GT_path}
+        return {"GT": img_GT, "LQ": img_LQ, "LQ_clip": lq4clip, "type": torch.tensor(type_id), "GT_path": GT_path}
 
     def __len__(self):
         return np.sum(self.data_lens)

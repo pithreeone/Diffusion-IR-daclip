@@ -46,7 +46,7 @@ class ConditionalUNet(nn.Module):
     # def __init__(self, in_nc, out_nc, nf, ch_mult=[1, 2, 4, 4], 
     #                 context_dim=512, use_degra_context=True, use_image_context=False, upscale=1):
     def __init__(self, in_nc, out_nc, nf, ch_mult=[1, 2, 4, 4], 
-                    context_dim=512, use_daclip_context=True, upscale=1, in_ch_scale=2, cond_type=None, attn=True):
+                    context_dim=512, use_daclip_context=True, upscale=1, in_ch_scale=2, cond_type=None, attn=True, use_deg_embedding=False):
         super().__init__()
         self.depth = len(ch_mult)
         self.upscale = upscale # not used
@@ -55,6 +55,7 @@ class ConditionalUNet(nn.Module):
         # self.use_degra_context = use_degra_context
         self.use_image_context = self.use_degra_context = self.use_daclip_context = use_daclip_context
         self.cond_type = cond_type
+        self.use_deg_embedding = use_deg_embedding
         self.attn = attn
 
         num_head_channels = 32
@@ -67,7 +68,8 @@ class ConditionalUNet(nn.Module):
         if self.cond_type == 'cond_module':
             self.init_conv_cond = default_conv(in_nc, nf, 7)
             self.init_conv_cond = default_conv(in_nc*2, nf, 7)
-        
+        if self.use_deg_embedding:
+            self.init_conv_res_emb = default_conv(in_nc, nf, 7)
         # time embeddings
         time_dim = nf * 4
 
@@ -99,6 +101,7 @@ class ConditionalUNet(nn.Module):
         self.downs = nn.ModuleList([])
         self.ups = nn.ModuleList([])
         self.cond_downs = nn.ModuleList([])
+        self.residual_emb_downs = nn.ModuleList([])
         ch_mult = [1] + ch_mult
 
         self.SMblocks = nn.ModuleList([])
@@ -118,7 +121,7 @@ class ConditionalUNet(nn.Module):
             #     att_down = LinearAttention(dim_in) # if i < 2 else Attention(dim_in)
             #     att_up = LinearAttention(dim_out) # if i < 2 else Attention(dim_out)
 
-            if attn == "spatial":
+            if attn == "standard":
                 if i in [3]:
                     att_module_down = AttentionBlock(dim_in, use_checkpoint=False, num_heads=num_heads_in,
                         num_head_channels=num_head_channels, use_new_attention_order=False)
@@ -172,7 +175,18 @@ class ConditionalUNet(nn.Module):
                     Downsample(dim_in, dim_out) if i != (self.depth-1) else Identity()
                 ]))
                 self.SMblocks.append(SpatialModulationBlock(dim_in))
-
+            if self.use_deg_embedding:
+                self.residual_emb_downs.append(nn.ModuleList([
+                    block_class(dim_in=dim_in, dim_out=dim_in),
+                    Downsample(dim_in, dim_out) if i != (self.depth-1) else default_conv(dim_in, dim_out)
+                ]))
+        if self.use_deg_embedding:
+            self.residual_emb_pooling = nn.AdaptiveAvgPool2d(1)
+            self.residual_emb_mlp = nn.Sequential(
+                nn.Linear(nf * ch_mult[-1], time_dim), 
+                NonLinearity(),
+                nn.Linear(time_dim, time_dim)
+            )
         mid_dim = nf * ch_mult[-1]
         num_heads_mid = mid_dim // num_head_channels
 
@@ -186,7 +200,7 @@ class ConditionalUNet(nn.Module):
         #                     num_head_channels=num_head_channels,
         #                     use_new_attention_order=False,
         #                 )
-        if attn == "spatial":
+        if attn == "standard":
             self.mid_attn = AttentionBlock(mid_dim, use_checkpoint=False, num_heads=num_heads_out,
                             num_head_channels=num_head_channels, use_new_attention_order=False)
         elif attn == "linear":
@@ -202,7 +216,7 @@ class ConditionalUNet(nn.Module):
         i, dim_in, att_down, num_heads_in, num_head_channels,
         use_checkpoint=False, attn_type="none"
     ):
-        if attn_type == "spatial":
+        if attn_type == "standard":
             return AttentionBlock(
                 dim_in,
                 use_checkpoint=use_checkpoint,
@@ -232,8 +246,9 @@ class ConditionalUNet(nn.Module):
             time = torch.tensor([time]).to(xt.device)
 
         x = xt - mu
-        if cond is not None and self.cond_type == 'concat':
-            x = torch.cat([x, mu, cond-mu], dim=1)
+        residual_emb = cond - mu
+        if self.cond_type == 'concat':
+            x = torch.cat([x, mu, residual_emb], dim=1)
             # x = torch.cat([x, mu, cond], dim=1)
             # x = torch.cat([x, cond, mu-cond], dim=1)
             # x = torch.cat([x, mu, mu-cond], dim=1)
@@ -242,6 +257,7 @@ class ConditionalUNet(nn.Module):
 
         H, W = x.shape[2:]
         x = self.check_image_size(x, H, W)
+        residual_emb = self.check_image_size(residual_emb, H, W)
 
         x = self.init_conv(x)
         x_ = x.clone()
@@ -260,6 +276,17 @@ class ConditionalUNet(nn.Module):
             x = downsample(x)
 
         cond_embedding = []
+
+        if self.use_deg_embedding:
+            residual_emb = self.init_conv_res_emb(residual_emb)
+            for i, (b, downsample) in enumerate(self.residual_emb_downs):
+                residual_emb = b(residual_emb)
+                residual_emb = downsample(residual_emb)
+
+            residual_emb = self.residual_emb_pooling(residual_emb)
+            residual_emb = residual_emb.view(residual_emb.size(0), -1)
+            residual_emb = self.residual_emb_mlp(residual_emb)
+
         if self.cond_type == 'cond_module':
             # cond = cond - mu
             cond = torch.cat([cond, mu], dim=1)
@@ -301,7 +328,10 @@ class ConditionalUNet(nn.Module):
                 x = torch.cat([x, h.pop()], dim=1)
                 x = b1(x, t)
                 x = torch.cat([x, h.pop()], dim=1)
-                x = b2(x, t)
+                if self.use_deg_embedding:
+                    x = b2(x, residual_emb)
+                else:
+                    x = b2(x, t)
 
             x = attn(x)
             x = upsample(x)

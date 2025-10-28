@@ -4,9 +4,7 @@ use_tb_logger: true
 model: denoising_ss
 # distortion: [motion-blurry,hazy,jpeg-compressed,low-light,noisy,raindrop,rainy,shadowed,snowy,uncompleted]
 distortion: [motion-blurry,hazy,low-light,noisy_25,rainy]
-# distortion: [rainy]
-# distortion: [motion-blurry]
-gpu_ids: [0,1]
+gpu_ids: [2]
 
 sde:
   max_sigma: 50
@@ -28,7 +26,7 @@ degradation: # for some synthetic dataset that only have GTs
 datasets:
   train:
     name: Train_Dataset
-    mode: MD
+    mode: MDFS
     dataroot: ../Warehouse/Diffusion-IR/datasets/train
     first_stage_result: results/fs_result_ff_mtk1027_small_train
     # first_stage_result: results/fs_result_ff_mtk_large_train
@@ -37,23 +35,27 @@ datasets:
     # first_stage_result: results/fs_result_rainTrainL_-1_1_all
 
     use_shuffle: true
-    n_workers: 4  # per GPU
-    batch_size: 16
+    n_workers: 16  # per GPU
+    batch_size: 256
     patch_size: 256
     use_flip: true
     use_rot: true
     color: RGB
     normalize_01: false
-  val:
+  valaug:
     name: Val_Dataset
-    mode: MD
-    n_sample: 100
+    mode: MDFS
+    # n_sample: 20
     dataroot: ../Warehouse/Diffusion-IR/datasets/daclip-val
     first_stage_result: results/fs_result_ff_mtk1027_small_test
     # first_stage_result: results/fs_result_ff_mtk_large_test
     # first_stage_result: results/fs_result_ff_251015-195349_test
     # first_stage_result: results/fs_result_rainTestL_-1_1/prediction
     # first_stage_result: results/fs_result_rainTestL_-1_1_all
+
+    n_workers: 16  # per GPU
+    batch_size: 256
+    patch_size: 256
     normalize_01: false
 
 #### network structures
@@ -105,9 +107,9 @@ train:
   fidelity_weight: 0.5
 
   manual_seed: 0
-  val_freq: !!float 4e4
+  val_freq: !!float 1e0
 
 #### logger
 logger:
   print_freq: 200
-  save_checkpoint_freq: !!float 4e4
+  save_checkpoint_freq: !!float 1e0

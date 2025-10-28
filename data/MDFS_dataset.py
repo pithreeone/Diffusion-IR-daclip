@@ -81,7 +81,6 @@ class MDFSDataset(data.Dataset):
                 FS_result_paths = util.get_image_paths(opt["data_type"], os.path.join(root, deg_type))
             # # list all subfolders
             # subfolders = [os.path.join(root, d) for d in os.listdir((root))]
-
             # # collect image paths from all subfolders
             # FS_result_paths = []
             # for sub in subfolders:
@@ -105,7 +104,7 @@ class MDFSDataset(data.Dataset):
         #     deg_type = self.deg_types[type_id]
 
         type_id = int(index % len(self.deg_types))
-        if self.opt["phase"] == "train":
+        if self.opt["phase"] in ["train", "valaug"]:
             deg_type = self.deg_types[type_id]
             index = np.random.randint(self.data_lens[type_id])
         else:
@@ -133,7 +132,7 @@ class MDFSDataset(data.Dataset):
             None, FS_result_path, None
         )  # return: Numpy float32, HWC, BGR, [0,1]
 
-        if self.opt["phase"] == "train":
+        if self.opt["phase"] in ["train", "valaug"]:
             H, W, C = img_GT.shape
 
             rnd_h = random.randint(0, max(0, H - self.size))

@@ -15,11 +15,13 @@ import torch.multiprocessing as mp
 from torch.utils.data import Subset
 # from IPython import embed
 from torch.utils.tensorboard import SummaryWriter
+# from torch import nn, optim
 
 # import open_clip
 
 import options as option
 from models import create_model
+from models.classifier_model import DegradationClassifier
 
 import open_clip
 import utils as util
@@ -57,12 +59,12 @@ def main():
     parser.add_argument("--local-rank", type=int, default=0)
     args = parser.parse_args()
     opt = option.parse(args.opt, is_train=True)
-    opt_ff = option.simple_parse("options/ff.yaml")
 
     # convert to NoneDict, which returns None for missing keys
     opt = option.dict_to_nonedict(opt)
-    opt_ff = option.dict_to_nonedict(opt_ff)
-    opt_ff["gpu_ids"] = opt["gpu_ids"]
+    gpu_id = opt["gpu_ids"][0]
+    device = f"cuda"
+    print(device)
 
     # choose small opt for SFTMD test, fill path of pre-trained model_F
     #### set random seed
@@ -162,7 +164,9 @@ def main():
                 )
             else:
                 train_sampler = None
+
             train_loader = create_dataloader(train_set, dataset_opt, opt, train_sampler)
+
             if rank <= 0:
                 logger.info(
                     "Number of train images: {:,d}, iters: {:,d}".format(
@@ -174,13 +178,13 @@ def main():
                         total_epochs, total_iters
                     )
                 )
-        elif phase == "val":
-            testset_config = "options/eval5d.yaml"
-            # val_set = get_testsets(testset_config, process_mode='val')
+        elif phase in ["val", "valaug"]:
             val_set = create_dataset(dataset_opt)
-            if opt['datasets']['val']['n_sample'] is not None:
-                val_set = Subset(val_set, range(opt['datasets']['val']['n_sample']))
+            
+            # if opt['datasets']['val']['n_sample'] is not None:
+            #     val_set = Subset(val_set, range(opt['datasets']['val']['n_sample']))
             val_loader = create_dataloader(val_set, dataset_opt, opt, None)
+
             if rank <= 0:
                 logger.info(
                     "Number of val images in [{:s}]: {:d}".format(
@@ -193,9 +197,9 @@ def main():
     assert val_loader is not None
 
     #### create model
-    model = create_model(opt, opt_ff=opt_ff)
-    # model_ff = create_model(opt_ff)
-    device = model.device
+    # model = create_model(opt, opt_ff=opt_ff)
+    model = DegradationClassifier(5)
+    model = model.to(device)
 
     #### resume training
     if resume_state:
@@ -212,8 +216,8 @@ def main():
         current_step = 0
         start_epoch = 0
 
-    sde = util.IRSDE(max_sigma=opt["sde"]["max_sigma"], T=opt["sde"]["T"], schedule=opt["sde"]["schedule"], eps=opt["sde"]["eps"], device=device)
-    sde.set_model(model.ss_model)
+    # sde = util.IRSDE(max_sigma=opt["sde"]["max_sigma"], T=opt["sde"]["T"], schedule=opt["sde"]["schedule"], eps=opt["sde"]["eps"], device=device)
+    # sde.set_model(model.ss_model)
 
     scale = opt['degradation']['scale']
 
@@ -228,6 +232,9 @@ def main():
     
     os.makedirs('image', exist_ok=True)
 
+    criterion = torch.nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4, betas=(0.9, 0.999))
+
     use_daclip_context = opt['network_G']['setting']['use_daclip_context']
     for epoch in range(start_epoch, total_epochs + 2):
         if opt["dist"]:
@@ -238,138 +245,78 @@ def main():
             if current_step > total_iters:
                 break
 
-            if "FS" in train_data:
-                LQ, GT, FS, deg_type = train_data["LQ"], train_data["GT"], train_data["FS"], train_data["type"]
-                timesteps, states = sde.generate_random_states(x0=GT, mu=LQ)
-                model.feed_data(states, LQ, GT=GT, FS=FS, deg_type=deg_type) # xt, mu, x0
+            LQ, GT, deg_type = train_data["LQ"].to(device), train_data["GT"], train_data["type"].to(device)
+            logits = model(LQ)
+            loss = criterion(logits, deg_type)
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+
+        avg_psnr = 0.0
+        avg_psnr_fs = 0.0    # baseline: first stage
+        idx = 0
+
+        correct = 0
+        total = 0
+        model.eval()
+
+        for _, val_data in tqdm(enumerate(val_loader), total=len(val_loader), leave=False):
+            torch.cuda.empty_cache()
+            # LQ, GT, FS, deg_type = val_data["LQ"], val_data["GT"], val_data["FS"], val_data["type"]
+            if "FS" in val_data:
+                LQ, GT, FS, deg_type = val_data["LQ"], val_data["GT"], val_data["FS"], val_data["type"]
+                # noisy_state = sde.noise_state(LQ)
+                # model.feed_data(noisy_state, LQ, GT=GT, FS=FS, deg_type=deg_type) # xt, mu, x0
             else:
-                LQ, GT, deg_type = train_data["LQ"], train_data["GT"], train_data["type"]
-                timesteps, states = sde.generate_random_states(x0=GT, mu=LQ)
-                # model.feed_data(states, LQ, GT=GT) # xt, mu, x0
-                model.feed_data(states, LQ, GT=GT) # xt, mu, x0
+                LQ, GT, deg_type = val_data["LQ"], val_data["GT"], val_data["type"]
+                # noisy_state = sde.noise_state(LQ)
+                # # model.feed_data(noisy_state, LQ, GT=GT) # xt, mu, x0
+                # model.feed_data(noisy_state, LQ, GT=GT) # xt, mu, x0
+            
 
-            # model_ff.feed_data(LQ)
-            # FS = model_ff.test()
-            # output = util.tensor2img((FS+1.0)/2.0)  # uint8
-            # util.save_img(output, f'image/{current_step}.png')
+            LQ, GT, FS, deg_type = train_data["LQ"].to(device), train_data["GT"].to(device), train_data["FS"].to(device), train_data["type"]
+            logits = model(LQ-FS)   
+            preds = torch.argmax(logits, dim=1)
 
-            ### set terminal-state as FS
-            # timesteps, states = sde.generate_random_states(x0=GT, mu=FS)
-            # timesteps, states = sde.generate_random_states(x0=GT, mu=LQ)
-            # model.feed_data(states, LQ, GT) # xt, mu, x0
-            # model.feed_data(states, LQ, GT=GT, FS=FS) # xt, mu, x0
+            correct += (preds.cpu() == deg_type).sum().item()
+            total += deg_type.size(0)
 
-            # gt_img = util.tensor2img(GT.squeeze())
-            # lq_img = util.tensor2img(LQ.squeeze())
-            # fs_img = util.tensor2img(FS.squeeze())
-            # states_img = util.tensor2img(states.squeeze())
-            # util.save_img(gt_img, f'image/{current_step}_{deg_type[0]}_GT.png')
-            # util.save_img(lq_img, f'image/{current_step}_{deg_type[0]}_LQ.png')
-            # util.save_img(fs_img, f'image/{current_step}_{deg_type[0]}_FS.png')
-            # util.save_img(states_img, f'image/{current_step}_{deg_type[0]}_states.png')
+            # output = util.tensor2img((visuals["Output"].squeeze()+1.0)/2.0)  # uint8
+            # gt_img = util.tensor2img((GT.squeeze()+1.0)/2.0)  # uint8
+            # lq_img = util.tensor2img((LQ.squeeze()+1.0)/2.0)
+            # fs_img = util.tensor2img((model.FS.squeeze()+1.0)/2.0)
 
-            model.optimize_parameters(current_step, timesteps, sde)
-            model.update_learning_rate(
-                current_step, warmup_iter=opt["train"]["warmup_iter"]
-            )
+            # util.save_img(output, f'{opt["path"]["experiments_root"]}/val_images/{idx}_{deg_type[0]}_SR.png')
+            # util.save_img(gt_img, f'{opt["path"]["experiments_root"]}/val_images/{idx}_{deg_type[0]}_GT.png')
+            # util.save_img(lq_img, f'{opt["path"]["experiments_root"]}/val_images/{idx}_{deg_type[0]}_LQ.png')
+            # util.save_img(fs_img, f'{opt["path"]["experiments_root"]}/val_images/{idx}_{deg_type[0]}_FS.png')
 
-            if current_step % opt["logger"]["print_freq"] == 0:
-                logs = model.get_current_log()
-                message = "<epoch:{:3d}, iter:{:8,d}, lr:{:.3e}> ".format(
-                    epoch, current_step, model.get_current_learning_rate()
-                )
-                for k, v in logs.items():
-                    message += "{:s}: {:.4e} ".format(k, v)
-                    # tensorboard logger
-                    if opt["use_tb_logger"] and "debug" not in opt["name"]:
-                        if rank <= 0:
-                            tb_logger.add_scalar(k, v, current_step)
-                if rank <= 0:
-                    logger.info(message)
+            # # calculate PSNR
+            # avg_psnr += util.calculate_psnr(output, gt_img)
+            # avg_psnr_fs += util.calculate_psnr(fs_img, gt_img)
+            # idx += 1
 
-            # validation, to produce ker_map_list(fake)
-            if current_step % opt["train"]["val_freq"] == 0 and rank <= 0:
-                avg_psnr = 0.0
-                avg_psnr_fs = 0.0    # baseline: first stage
-                idx = 0
+        print("Accuracy:", correct/total*100)
+        model.train()
+            #     # torch.cuda.empty_cache()
+            #     # avg_psnr = avg_psnr / idx
+            #     # avg_psnr_fs = avg_psnr_fs / idx
 
-                correct = 0
-                total = 0
-                for _, val_data in enumerate(val_loader):
-                    torch.cuda.empty_cache()
-                    # LQ, GT, FS, deg_type = val_data["LQ"], val_data["GT"], val_data["FS"], val_data["type"]
-                    if "FS" in val_data:
-                        LQ, GT, FS, deg_type = val_data["LQ"], val_data["GT"], val_data["FS"], val_data["type"]
-                        noisy_state = sde.noise_state(LQ)
-                        model.feed_data(noisy_state, LQ, GT=GT, FS=FS, deg_type=deg_type) # xt, mu, x0
-                    else:
-                        LQ, GT, deg_type = val_data["LQ"], val_data["GT"], val_data["type"]
-                        noisy_state = sde.noise_state(LQ)
-                        # model.feed_data(noisy_state, LQ, GT=GT) # xt, mu, x0
-                        model.feed_data(noisy_state, LQ, GT=GT) # xt, mu, x0
-                    
-                    # model_ff.feed_data(LQ)
-                    # FS = model_ff.test()
+            #     # if avg_psnr > best_psnr:
+            #     #     best_psnr = avg_psnr
+            #     #     best_iter = current_step
+            #     #     best_psnr_fs = avg_psnr_fs
 
-                    ### set terminal-state as FS
-                    # noisy_state = sde.noise_state(FS)
-                    # noisy_state = sde.noise_state(LQ)
-
-                    # model.feed_data(noisy_state, LQ, GT=GT, FS=FS) # xt, mu, x0
-
-                    model.test(sde, mode=opt['sde']['sampling_mode'])
-                    visuals = model.get_current_visuals()
-                    # correct += model.correct
-                    # total += model.total
-
-                    output = util.tensor2img((visuals["Output"].squeeze()+1.0)/2.0)  # uint8
-                    gt_img = util.tensor2img((GT.squeeze()+1.0)/2.0)  # uint8
-                    lq_img = util.tensor2img((LQ.squeeze()+1.0)/2.0)
-                    fs_img = util.tensor2img((model.FS.squeeze()+1.0)/2.0)
-
-                    util.save_img(output, f'{opt["path"]["experiments_root"]}/val_images/{idx}_{deg_type[0]}_SR.png')
-                    util.save_img(gt_img, f'{opt["path"]["experiments_root"]}/val_images/{idx}_{deg_type[0]}_GT.png')
-                    util.save_img(lq_img, f'{opt["path"]["experiments_root"]}/val_images/{idx}_{deg_type[0]}_LQ.png')
-                    util.save_img(fs_img, f'{opt["path"]["experiments_root"]}/val_images/{idx}_{deg_type[0]}_FS.png')
-
-                    # calculate PSNR
-                    avg_psnr += util.calculate_psnr(output, gt_img)
-                    avg_psnr_fs += util.calculate_psnr(fs_img, gt_img)
-                    idx += 1
-
-                torch.cuda.empty_cache()
-                avg_psnr = avg_psnr / idx
-                avg_psnr_fs = avg_psnr_fs / idx
-
-                if avg_psnr > best_psnr:
-                    best_psnr = avg_psnr
-                    best_iter = current_step
-                    best_psnr_fs = avg_psnr_fs
-
-                # log
-                logger.info("# Validation # PSNR: {:.6f}, Best PSNR: {:.6f}, PSNR (FS): {:.6f}| Iter: {}".format(avg_psnr, best_psnr, avg_psnr_fs, best_iter))
-                logger_val = logging.getLogger("val")  # validation logger
-                logger_val.info(
-                    "<epoch:{:3d}, iter:{:8,d}, psnr: {:.6f}, psnr_fs: {:.6f}".format(
-                        epoch, current_step, avg_psnr, avg_psnr_fs
-                    )
-                )
-                # print(f"Accuracy: {correct/total}", correct, total)
-                print("<epoch:{:3d}, iter:{:8,d}, psnr: {:.6f}, psnr_fs: {:.6f}".format(
-                        epoch, current_step, avg_psnr, avg_psnr_fs
-                    ))
-                # tensorboard logger
-                if opt["use_tb_logger"] and "debug" not in opt["name"]:
-                    tb_logger.add_scalar("psnr", avg_psnr, current_step)
-
-            if error.value:
-                sys.exit(0)
-            #### save models and training states
-            if current_step % opt["logger"]["save_checkpoint_freq"] == 0:
-                if rank <= 0:
-                    logger.info("Saving models and training states.")
-                    model.save(current_step)
-                    # model.save_training_state(epoch, current_step)
+            # if error.value:
+            #     sys.exit(0)
+            # #### save models and training states
+            # if current_step % opt["logger"]["save_checkpoint_freq"] == 0:
+            #     if rank <= 0:
+            #         logger.info("Saving models and training states.")
+            #         # model.save(current_step)
+            #         # model.save_training_state(epoch, current_step)
 
     if rank <= 0:
         logger.info("Saving the final model.")

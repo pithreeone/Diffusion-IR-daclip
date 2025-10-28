@@ -13,7 +13,7 @@ network_G:
   setting:
     in_nc: 3
     out_nc: 3
-    nf: 128
+    nf: 64
     ch_mult: [1, 2, 4, 4]
     context_dim: 512
     use_daclip_context: false
@@ -33,5 +33,6 @@ path:
   # pretrain_model_G: experiments/universal-ir_251006-165812/models/600000_G.pth
   # pretrain_model_G: experiments/feedforward-ir_251009-182704/models/240000_G.pth
   # pretrain_model_G: experiments/20251019/feedforward-ir_251015-195349/models/580000_G.pth
-  pretrain_model_G: experiments/MARC/feedforward_1020/daclip/large/460000_G.pth
+  # pretrain_model_G: experiments/MARC/feedforward_1020/daclip/large/460000_G.pth
+  pretrain_model_G: experiments/MARC/feedforward_1027/daclip_1027/1000000_G.pth
   # daclip: pretrained/daclip_ViT-B-32.pt

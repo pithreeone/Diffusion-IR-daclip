@@ -47,6 +47,8 @@ class DenoisingModelSS(BaseModel):
 
             # for param in self.fs_model.parameters():
             #     param.requires_grad = False
+        else:
+            self.fs_model = None
 
         if opt["network_G"]["setting"]["cond_type"] == 'concat':
             self.ss_model = networks.define_G(opt, in_ch_scale=3).to(self.device)
@@ -57,9 +59,10 @@ class DenoisingModelSS(BaseModel):
             self.ss_model = DistributedDataParallel(
                 self.ss_model, device_ids=[torch.cuda.current_device()]
             )
-            # self.fs_model = DistributedDataParallel(
-            #     self.fs_model, device_ids=[torch.cuda.current_device()]
-            # )
+            if self.fs_model is not None:
+                self.fs_model = DistributedDataParallel(
+                    self.fs_model, device_ids=[torch.cuda.current_device()]
+                )
         else:
             self.ss_model = DataParallel(self.ss_model)
         # print network
@@ -172,6 +175,8 @@ class DenoisingModelSS(BaseModel):
         if FS is not None:
             # self.first_stage_result = FS.to(self.device) # FS
             self.FS = FS.to(self.device) # FS
+        else:
+            self.FS = FS
         if GT is not None:
             self.state_0 = GT.to(self.device)  # GT
         if deg_type is not None:
